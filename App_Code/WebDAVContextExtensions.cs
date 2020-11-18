@@ -70,8 +70,7 @@ public static class WebDAVContextExtensions
     {
         // quickly try to get the value without a lock
         var session = context.Session;
-        var variable = session[variableName] as T;
-        if (variable == null)
+        if (!(session[variableName] is T variable))
         {
             // not found, create the value and try again, this time with a lock
             var value = variableCreator(context);

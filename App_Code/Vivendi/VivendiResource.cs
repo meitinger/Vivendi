@@ -231,16 +231,12 @@ namespace Aufbauwerk.Tools.Vivendi
             {
                 throw new ArgumentOutOfRangeException(nameof(id), "An object's ID must be positive.");
             }
-            if (name == null)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
             if (!HasObjectType)
             {
                 throw new InvalidOperationException("Object type must be set before the instance.");
             }
             _objectID = id;
-            _objectName = name;
+            _objectName = name ?? throw new ArgumentNullException(nameof(name));
             _hasObjectInstance = true;
         }
     }

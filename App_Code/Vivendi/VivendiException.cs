@@ -40,7 +40,7 @@ namespace Aufbauwerk.Tools.Vivendi
         internal static VivendiException ResourceNameExceedsRange(int maxLength) => new VivendiException(ERROR_FILENAME_EXCED_RANGE, $"The name of the resource must not exceed {maxLength} characters.");
         internal static VivendiException ResourceNameIsInvalid() => new VivendiException(ERROR_BAD_PATHNAME, "The name of the resource is invalid.");
         internal static VivendiException ResourceNotInGrantedSections() => new VivendiException("Access denied.");
-        internal static VivendiException ResourcePropertyIsReadonly([CallerMemberName]string propertyName = "") => new VivendiException($"The property {propertyName} is read-only.");
+        internal static VivendiException ResourcePropertyIsReadonly([CallerMemberName] string propertyName = "") => new VivendiException($"The property {propertyName} is read-only.");
         internal static VivendiException ResourceRequiresHigherAccessLevel() => new VivendiException("Insufficent access level.");
 
         private VivendiException(string message)
