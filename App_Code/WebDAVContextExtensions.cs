@@ -14,16 +14,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+using Aufbauwerk.Tools.Vivendi;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.DirectoryServices;
-using static System.FormattableString;
 using System.Linq;
 using System.Security.Principal;
 using System.Text;
 using System.Web;
-using Aufbauwerk.Tools.Vivendi;
+using static System.FormattableString;
 
 public static class WebDAVContextExtensions
 {
@@ -31,12 +31,12 @@ public static class WebDAVContextExtensions
 
     public static VivendiDocument GetDocument(this HttpContext context, Uri uri) => GetDocumentInternal(context, context.VerifyUri(uri));
 
-    static VivendiDocument GetDocumentInternal(HttpContext context, Uri uri) => GetResourceInternal(context, uri) as VivendiDocument ?? throw WebDAVException.ResourceCollectionsImmutable();
+    private static VivendiDocument GetDocumentInternal(HttpContext context, Uri uri) => GetResourceInternal(context, uri) as VivendiDocument ?? throw WebDAVException.ResourceCollectionsImmutable();
 
     public static Uri GetHref(this HttpContext context, VivendiResource resource)
     {
         // get the suffix and prefix
-        var suffix = (resource ?? throw new ArgumentNullException("resource")).Path;
+        var suffix = (resource ?? throw new ArgumentNullException(nameof(resource))).Path;
         var prefix = context.Request.ApplicationPath;
         var path = new StringBuilder();
 
@@ -64,9 +64,9 @@ public static class WebDAVContextExtensions
 
     public static VivendiResource GetResource(this HttpContext context, Uri uri) => GetResourceInternal(context, context.VerifyUri(uri));
 
-    static VivendiResource GetResourceInternal(HttpContext context, Uri uri) => TryGetResourceInternal(context, uri, out _, out _, out _) ?? throw WebDAVException.ResourceNotFound(uri);
+    private static VivendiResource GetResourceInternal(HttpContext context, Uri uri) => TryGetResourceInternal(context, uri, out _, out _, out _) ?? throw WebDAVException.ResourceNotFound(uri);
 
-    static T GetSessionVariable<T>(HttpContext context, string variableName, Func<HttpContext, T> variableCreator) where T : class
+    private static T GetSessionVariable<T>(HttpContext context, string variableName, Func<HttpContext, T> variableCreator) where T : class
     {
         // quickly try to get the value without a lock
         var session = context.Session;
@@ -88,7 +88,7 @@ public static class WebDAVContextExtensions
         return variable;
     }
 
-    static Vivendi GetVivendi(HttpContext context) => GetSessionVariable(context, "Vivendi", c =>
+    private static Vivendi GetVivendi(HttpContext context) => GetSessionVariable(context, "Vivendi", c =>
     {
         // query all principal properties
         var principal = c.User as WindowsPrincipal ?? throw new UnauthorizedAccessException();
@@ -109,14 +109,11 @@ public static class WebDAVContextExtensions
         vivendi.AddMitarbeiter().AddMitarbeiter("(Alle Mitarbeiter)").ShowAll = true;
 
         // local method to check if a given principal collection contains the current user
-        bool isInList(WebDAVSettings.PrincipalCollection principals) => principals.Any(p =>
+        bool isInList(WebDAVSettings.PrincipalCollection principals) => principals.Any(p => p.Type switch
         {
-            switch (p.Type)
-            {
-                case WebDAVSettings.PrincipalType.User: return string.Equals(p.Name, userName, StringComparison.OrdinalIgnoreCase);
-                case WebDAVSettings.PrincipalType.Group: return principal.IsInRole(p.Name);
-                default: return false;
-            }
+            WebDAVSettings.PrincipalType.User => string.Equals(p.Name, userName, StringComparison.OrdinalIgnoreCase),
+            WebDAVSettings.PrincipalType.Group => principal.IsInRole(p.Name),
+            _ => false,
         });
 
         // check if the user is allowed to modify any owned instance
@@ -127,35 +124,31 @@ public static class WebDAVContextExtensions
         else if (WebDAVSettings.Instance.AllowModificationOfOwnedResources.Managers || WebDAVSettings.Instance.AllowModificationOfOwnedResources.Team)
         {
             // query the distinguishedName and manager of the current user
-            using (var dnSearcher = new DirectorySearcher(Invariant($"(objectSid={sid})"), new string[] { "distinguishedName", "manager" }))
+            using var dnSearcher = new DirectorySearcher(Invariant($"(objectSid={sid})"), new string[] { "distinguishedName", "manager" });
+            var user = dnSearcher.FindOne();
+            if (user != null)
             {
-                var user = dnSearcher.FindOne();
-                if (user != null)
+                // build a list of owners that can be accessed
+                var allowedOwners = new HashSet<SecurityIdentifier>();
+                void addSids(string propertyName, Func<string, string> queryBuilder)
                 {
-                    // build a list of owners that can be accessed
-                    var allowedOwners = new HashSet<SecurityIdentifier>();
-                    void addSids(string propertyName, Func<string, string> queryBuilder)
+                    // search the domain and add the object's sids if the property exists
+                    var property = user.Properties[propertyName].OfType<string>().FirstOrDefault();
+                    if (property != null)
                     {
-                        // search the domain and add the object's sids if the property exists
-                        var property = user.Properties[propertyName].OfType<string>().FirstOrDefault();
-                        if (property != null)
-                        {
-                            using (var searcher = new DirectorySearcher(queryBuilder(property), new string[] { "objectSid" }) { PageSize = 1000 })
-                            {
-                                allowedOwners.UnionWith(searcher.FindAll().Cast<SearchResult>().SelectMany(r => r.Properties["objectSid"].OfType<byte[]>()).Select(b => new SecurityIdentifier(b, 0)));
-                            }
-                        }
+                        using var searcher = new DirectorySearcher(queryBuilder(property), new string[] { "objectSid" }) { PageSize = 1000 };
+                        allowedOwners.UnionWith(searcher.FindAll().Cast<SearchResult>().SelectMany(r => r.Properties["objectSid"].OfType<byte[]>()).Select(b => new SecurityIdentifier(b, 0)));
                     }
-                    if (WebDAVSettings.Instance.AllowModificationOfOwnedResources.Managers)
-                    {
-                        addSids("distinguishedName", distinguishedName => Invariant($"(manager:1.2.840.113556.1.4.1941:={distinguishedName})"));
-                    }
-                    if (WebDAVSettings.Instance.AllowModificationOfOwnedResources.Team)
-                    {
-                        addSids("manager", manager => Invariant($"(manager={manager})"));
-                    }
-                    vivendi.AllowModificationOfOwnedResource = (_, owner) => allowedOwners.Contains(owner);
                 }
+                if (WebDAVSettings.Instance.AllowModificationOfOwnedResources.Managers)
+                {
+                    addSids("distinguishedName", distinguishedName => Invariant($"(manager:1.2.840.113556.1.4.1941:={distinguishedName})"));
+                }
+                if (WebDAVSettings.Instance.AllowModificationOfOwnedResources.Team)
+                {
+                    addSids("manager", manager => Invariant($"(manager={manager})"));
+                }
+                vivendi.AllowModificationOfOwnedResource = (_, owner) => allowedOwners.Contains(owner);
             }
         }
 
@@ -171,7 +164,7 @@ public static class WebDAVContextExtensions
 
     public static VivendiDocument TryGetDocument(this HttpContext context, Uri uri, out VivendiCollection parentCollection, out string name) => TryGetDocumentInternal(context, context.VerifyUri(uri), out parentCollection, out name);
 
-    static VivendiDocument TryGetDocumentInternal(HttpContext context, Uri uri, out VivendiCollection parentCollection, out string name)
+    private static VivendiDocument TryGetDocumentInternal(HttpContext context, Uri uri, out VivendiCollection parentCollection, out string name)
     {
         // try to get the resource
         var res = TryGetResourceInternal(context, uri, out parentCollection, out name, out var isCollection);
@@ -193,7 +186,7 @@ public static class WebDAVContextExtensions
 
     public static VivendiResource TryGetResource(this HttpContext context, Uri uri) => TryGetResourceInternal(context, context.VerifyUri(uri), out _, out _, out _);
 
-    static VivendiResource TryGetResourceInternal(HttpContext context, Uri uri, out VivendiCollection parentCollection, out string name, out bool isCollection)
+    private static VivendiResource TryGetResourceInternal(HttpContext context, Uri uri, out VivendiCollection parentCollection, out string name, out bool isCollection)
     {
         // ensure the uri refers to the same store
         var vivendi = GetVivendi(context);
@@ -235,7 +228,7 @@ public static class WebDAVContextExtensions
     public static Uri VerifyUri(this HttpContext context, Uri uri)
     {
         // if it's a relative uri, return an absolute one
-        if (!(uri ?? throw new ArgumentNullException("uri")).IsAbsoluteUri)
+        if (!(uri ?? throw new ArgumentNullException(nameof(uri))).IsAbsoluteUri)
         {
             return new Uri(context.Request.Url, uri);
         }

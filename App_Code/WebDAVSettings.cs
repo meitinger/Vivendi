@@ -20,28 +20,20 @@ using System.Configuration;
 
 public sealed class WebDAVSettings : ConfigurationSection
 {
-    const string AllowModificationOfOwnedResourcesElement = "allowModificationOfOwnedResources";
-    const string AllowModificationOfVivendiResourcesElement = "allowModificationOfVivendiResources";
-    const string InstanceElement = "webDAVSettings";
+    private const string AllowModificationOfOwnedResourcesElement = "allowModificationOfOwnedResources";
+    private const string AllowModificationOfVivendiResourcesElement = "allowModificationOfVivendiResources";
+    private const string InstanceElement = "webDAVSettings";
 
     public sealed class OwnedResourcesPrincipalCollection : PrincipalCollection
     {
-        const string ManagersAttribute = "managers";
-        const string TeamAttribute = "team";
+        private const string ManagersAttribute = "managers";
+        private const string TeamAttribute = "team";
 
         [ConfigurationProperty(ManagersAttribute, DefaultValue = true)]
-        public bool Managers
-        {
-            get => (bool)this[ManagersAttribute];
-            set => this[ManagersAttribute] = value;
-        }
+        public bool Managers => (bool)this[ManagersAttribute];
 
         [ConfigurationProperty(TeamAttribute, DefaultValue = false)]
-        public bool Team
-        {
-            get => (bool)this[TeamAttribute];
-            set => this[TeamAttribute] = value;
-        }
+        public bool Team => (bool)this[TeamAttribute];
     }
 
     public abstract class PrincipalCollection : ConfigurationElementCollection, IEnumerable<PrincipalElement>
@@ -50,8 +42,9 @@ public sealed class WebDAVSettings : ConfigurationSection
 
         protected override Object GetElementKey(ConfigurationElement element) => ((PrincipalElement)element).Name;
 
-        public IEnumerator<PrincipalElement> GetEnumerator()
+        public new IEnumerator<PrincipalElement> GetEnumerator()
         {
+            // this.Cast<>(PrincipalElement).GetEnumerator() doesn't work
             var enumerator = base.GetEnumerator();
             while (enumerator.MoveNext())
             {
@@ -62,22 +55,14 @@ public sealed class WebDAVSettings : ConfigurationSection
 
     public sealed class PrincipalElement : ConfigurationElement
     {
-        const string NameAttribute = "name";
-        const string TypeAttribute = "type";
+        private const string NameAttribute = "name";
+        private const string TypeAttribute = "type";
 
         [ConfigurationProperty(NameAttribute, IsRequired = true, IsKey = true)]
-        public string Name
-        {
-            get => (string)this[NameAttribute];
-            set => this[NameAttribute] = value;
-        }
+        public string Name => (string)this[NameAttribute];
 
         [ConfigurationProperty(TypeAttribute, IsRequired = true)]
-        public PrincipalType Type
-        {
-            get => (PrincipalType)this[TypeAttribute];
-            set => this[TypeAttribute] = value;
-        }
+        public PrincipalType Type => (PrincipalType)this[TypeAttribute];
     }
 
     public enum PrincipalType
@@ -86,24 +71,15 @@ public sealed class WebDAVSettings : ConfigurationSection
         Group,
     }
 
-    public sealed class VivendiResourcesPrincipalCollection : PrincipalCollection
-    { }
+    public sealed class VivendiResourcesPrincipalCollection : PrincipalCollection { }
 
     public static WebDAVSettings Instance { get; } = ConfigurationManager.GetSection(InstanceElement) as WebDAVSettings;
 
     [ConfigurationProperty(AllowModificationOfOwnedResourcesElement, IsDefaultCollection = false)]
     [ConfigurationCollection(typeof(OwnedResourcesPrincipalCollection))]
-    public OwnedResourcesPrincipalCollection AllowModificationOfOwnedResources
-    {
-        get => (OwnedResourcesPrincipalCollection)base[AllowModificationOfOwnedResourcesElement];
-        set => base[AllowModificationOfOwnedResourcesElement] = value;
-    }
+    public OwnedResourcesPrincipalCollection AllowModificationOfOwnedResources => (OwnedResourcesPrincipalCollection)base[AllowModificationOfOwnedResourcesElement];
 
     [ConfigurationProperty(AllowModificationOfVivendiResourcesElement, IsDefaultCollection = false)]
     [ConfigurationCollection(typeof(VivendiResourcesPrincipalCollection))]
-    public VivendiResourcesPrincipalCollection AllowModificationOfVivendiResources
-    {
-        get => (VivendiResourcesPrincipalCollection)base[AllowModificationOfVivendiResourcesElement];
-        set => base[AllowModificationOfVivendiResourcesElement] = value;
-    }
+    public VivendiResourcesPrincipalCollection AllowModificationOfVivendiResources => (VivendiResourcesPrincipalCollection)base[AllowModificationOfVivendiResourcesElement];
 }

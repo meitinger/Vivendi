@@ -14,9 +14,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+using Aufbauwerk.Tools.Vivendi;
 using System;
 using System.Collections.Generic;
-using static System.FormattableString;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -25,7 +25,7 @@ using System.Text;
 using System.Web;
 using System.Web.SessionState;
 using System.Xml;
-using Aufbauwerk.Tools.Vivendi;
+using static System.FormattableString;
 
 public abstract class WebDAVHandler : IHttpHandler, IRequiresSessionState
 {
@@ -68,7 +68,7 @@ public abstract class WebDAVHandler : IHttpHandler, IRequiresSessionState
         return documentElement;
     }
 
-    void HandleException(HttpContext context, WebDAVException e)
+    private void HandleException(HttpContext context, WebDAVException e)
     {
         context.Response.TrySkipIisCustomErrors = true;
         context.Response.StatusCode = e.StatusCode;
@@ -89,10 +89,8 @@ public abstract class WebDAVHandler : IHttpHandler, IRequiresSessionState
         // write the document
         context.Response.ContentType = "application/xml";
         context.Response.ContentEncoding = Encoding.UTF8;
-        using (var writer = new StreamWriter(context.Response.OutputStream, context.Response.ContentEncoding))
-        {
-            doc.Save(writer);
-        }
+        using var writer = new StreamWriter(context.Response.OutputStream, context.Response.ContentEncoding);
+        doc.Save(writer);
     }
 }
 
@@ -149,8 +147,7 @@ public abstract class WebDAVGetAndHeadHandler : WebDAVHandler
         // get the resource and always return the last modified time
         var resource = context.GetResource();
         context.Response.AppendHeader("Last-Modified", resource.LastModified.ToUniversalTime().ToString("R", CultureInfo.InvariantCulture));
-        var doc = resource as VivendiDocument;
-        if (doc != null)
+        if (resource is VivendiDocument doc)
         {
             context.Response.AppendHeader("Content-Type", doc.ContentType);
             context.Response.AppendHeader("Content-Length", doc.Size.ToString(CultureInfo.InvariantCulture));
@@ -165,7 +162,7 @@ public abstract class WebDAVPropHandler : WebDAVHandler
 {
     protected abstract class Property
     {
-        static readonly IDictionary<PropertyName, Property> _properties = new Dictionary<PropertyName, Property>();
+        private static readonly IDictionary<PropertyName, Property> _properties = new Dictionary<PropertyName, Property>();
 
         public static IEnumerable<Property> All => _properties.Values;
 
@@ -192,16 +189,16 @@ public abstract class WebDAVPropHandler : WebDAVHandler
 
     protected class Property<T> : Property where T : VivendiResource
     {
-        static readonly Action<T, XmlElement> ProtectedSetter = (r, e) => throw WebDAVException.PropertyIsProtected();
+        private static readonly Action<T, XmlElement> ProtectedSetter = (r, e) => throw WebDAVException.PropertyIsProtected();
 
-        readonly Action<T, XmlElement> _getter;
-        readonly Action<T, XmlElement> _setter;
+        private readonly Action<T, XmlElement> _getter;
+        private readonly Action<T, XmlElement> _setter;
 
         private Property(string namespaceURI, string localName, bool isProtected, Action<T, XmlElement> getter, Action<T, XmlElement> setter)
         : base(new PropertyName(namespaceURI, localName), isProtected)
         {
-            _getter = getter ?? throw new ArgumentNullException("getter");
-            _setter = setter ?? throw new ArgumentNullException("setter");
+            _getter = getter ?? throw new ArgumentNullException(nameof(getter));
+            _setter = setter ?? throw new ArgumentNullException(nameof(setter));
         }
 
         public static void Register(string namespaceURI, string localName, Action<T, XmlElement> getter) => Register(new Property<T>(namespaceURI, localName, true, getter, ProtectedSetter));
@@ -219,8 +216,8 @@ public abstract class WebDAVPropHandler : WebDAVHandler
     {
         public PropertyName(string namespaceURI, string localName)
         {
-            NamespaceURI = namespaceURI ?? throw new ArgumentNullException(namespaceURI);
-            LocalName = localName ?? throw new ArgumentNullException(localName);
+            NamespaceURI = namespaceURI ?? throw new ArgumentNullException(nameof(namespaceURI));
+            LocalName = localName ?? throw new ArgumentNullException(nameof(localName));
         }
 
         public PropertyName(XmlElement e)
@@ -249,10 +246,10 @@ public abstract class WebDAVPropHandler : WebDAVHandler
         Property<VivendiDocument>.Register(DAV, "getcontenttype", (d, e) => e.InnerText = d.ContentType);
     }
 
-    static readonly DateTime MaxDate = new DateTime(2107, 12, 31, 23, 59, 59, DateTimeKind.Utc);
-    static readonly DateTime MinDate = new DateTime(1980, 1, 1, 0, 0, 0, DateTimeKind.Utc);
+    private static readonly DateTime MaxDate = new DateTime(2107, 12, 31, 23, 59, 59, DateTimeKind.Utc);
+    private static readonly DateTime MinDate = new DateTime(1980, 1, 1, 0, 0, 0, DateTimeKind.Utc);
     protected const string MS = "urn:schemas-microsoft-com:";
-    const string TimestampFormat = @"yyyy'-'MM'-'dd'T'HH':'mm':'ss'Z'";
+    private const string TimestampFormat = @"yyyy'-'MM'-'dd'T'HH':'mm':'ss'Z'";
 
     protected HttpStatusCode ProcessRequestInternal(HttpContext context, IEnumerable<VivendiResource> resources, IEnumerable<PropertyName> propertyNames, Action<Property, VivendiResource, XmlElement> action)
     {
@@ -338,18 +335,10 @@ public abstract class WebDAVPropHandler : WebDAVHandler
     protected static string ToHex(int i) => i.ToString("X8", CultureInfo.InvariantCulture);
     protected static string ToRTT(DateTime dt) => ToUtcInBounds(dt).ToString("R", CultureInfo.InvariantCulture);
     protected static string ToTimestamp(DateTime dt) => ToUtcInBounds(dt).ToString(TimestampFormat, CultureInfo.InvariantCulture);
-    static DateTime ToUtcInBounds(DateTime dt)
+    private static DateTime ToUtcInBounds(DateTime dt)
     {
         dt = dt.ToUniversalTime();
-        if (dt < MinDate)
-        {
-            return MinDate;
-        }
-        if (dt > MaxDate)
-        {
-            return MaxDate;
-        }
-        return dt;
+        return dt < MinDate ? MinDate : dt > MaxDate ? MaxDate : dt;
     }
 }
 
@@ -383,7 +372,7 @@ public sealed class WebDAVGetHandler : WebDAVGetAndHeadHandler
         return HttpStatusCode.OK;
     }
 
-    void WriteCollection(HttpContext context, VivendiCollection collection)
+    private void WriteCollection(HttpContext context, VivendiCollection collection)
     {
         // build the response html
         var response = new StringBuilder();
@@ -407,13 +396,11 @@ public sealed class WebDAVGetHandler : WebDAVGetAndHeadHandler
         context.Response.Write(response);
     }
 
-    void WriteDocument(HttpContext context, VivendiDocument document)
+    private void WriteDocument(HttpContext context, VivendiDocument document)
     {
         context.Response.AppendHeader("Content-Disposition", Invariant($"attachment; filename*=UTF-8''{Uri.EscapeDataString(document.DisplayName)}"));
-        using (var stream = new MemoryStream(document.Data))
-        {
-            stream.CopyTo(context.Response.OutputStream);
-        }
+        using var stream = new MemoryStream(document.Data);
+        stream.CopyTo(context.Response.OutputStream);
     }
 }
 
@@ -508,8 +495,7 @@ public sealed class WebDAVPropFindHandler : WebDAVPropHandler
                 throw WebDAVException.RequestHeaderInifiniteDepthNotSupported();
             case "1":
                 // also return all children if the resource is a collection
-                var collection = resource as VivendiCollection;
-                if (collection != null)
+                if (resource is VivendiCollection collection)
                 {
                     resources = resources.Concat(collection.Children);
                 }
@@ -577,16 +563,14 @@ public sealed class WebDAVPropPatchHandler : WebDAVPropHandler
 
 public sealed class WebDAVPutHandler : WebDAVHandler
 {
-    byte[] ReadAllBytes(HttpContext context)
+    private byte[] ReadAllBytes(HttpContext context)
     {
         // read all uploaded data
         var input = context.Request.InputStream;
-        using (var stream = new MemoryStream((int)input.Length))
-        {
-            input.CopyTo(stream);
-            var buffer = stream.GetBuffer();
-            return buffer.Length == stream.Length ? buffer : stream.ToArray();
-        }
+        using var stream = new MemoryStream((int)input.Length);
+        input.CopyTo(stream);
+        var buffer = stream.GetBuffer();
+        return buffer.Length == stream.Length ? buffer : stream.ToArray();
     }
 
     protected override HttpStatusCode ProcessRequestInternal(HttpContext context)

@@ -19,18 +19,18 @@ using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
-using System.Text;
 using System.Security.Principal;
+using System.Text;
 
 namespace Aufbauwerk.Tools.Vivendi
 {
     public abstract class VivendiCollection : VivendiResource
     {
-        const string DesktopIni = "desktop.ini";
+        private const string DesktopIni = "desktop.ini";
 
-        readonly IDictionary<string, VivendiResource> _namedResources = new Dictionary<string, VivendiResource>(Vivendi.PathComparer);
-        bool _showAll = false;
-        readonly IDictionary<VivendiResourceType, IDictionary<int, VivendiResource>> _typedResources = new Dictionary<VivendiResourceType, IDictionary<int, VivendiResource>>();
+        private readonly IDictionary<string, VivendiResource> _namedResources = new Dictionary<string, VivendiResource>(Vivendi.PathComparer);
+        private bool _showAll = false;
+        private readonly IDictionary<VivendiResourceType, IDictionary<int, VivendiResource>> _typedResources = new Dictionary<VivendiResourceType, IDictionary<int, VivendiResource>>();
 
         internal VivendiCollection(VivendiCollection parent, VivendiResourceType type, int id, string name)
         : base(parent, type, id, name)
@@ -57,7 +57,7 @@ namespace Aufbauwerk.Tools.Vivendi
             }
         }
 
-        IEnumerable<VivendiResource> ChildrenWithoutDesktopIni => _namedResources.Values.Concat(_typedResources.Values.SelectMany(d => d.Values)).Concat(GetChildren()).Where(r => r.InCollection);
+        private IEnumerable<VivendiResource> ChildrenWithoutDesktopIni => _namedResources.Values.Concat(_typedResources.Values.SelectMany(d => d.Values)).Concat(GetChildren()).Where(r => r.InCollection);
 
         public override DateTime CreationDate
         {
@@ -87,7 +87,7 @@ namespace Aufbauwerk.Tools.Vivendi
             set => _showAll = value;
         }
 
-        T Add<T>(T resource) where T : VivendiResource
+        private T Add<T>(T resource) where T : VivendiResource
         {
             // add and return the resource
             if (resource.Type == VivendiResourceType.Named)
@@ -202,7 +202,7 @@ GROUP BY
 
         public VivendiDocument AddStaticDocument(string name, byte[] data, FileAttributes attributes = FileAttributes.Normal) => Add(new VivendiStaticDocument(this, name, attributes, data));
 
-        VivendiDocument BuildDesktopIni(IDictionary<string, string> localizedNames)
+        private VivendiDocument BuildDesktopIni(IDictionary<string, string> localizedNames)
         {
             // translate the segment into a name
             var builder = new StringBuilder();
@@ -226,7 +226,7 @@ GROUP BY
             // check the name and ensure the collection is readable
             if (name == null)
             {
-                throw new ArgumentNullException("name");
+                throw new ArgumentNullException(nameof(name));
             }
             EnsureCanRead();
 
@@ -270,7 +270,7 @@ GROUP BY
 
         protected virtual IEnumerable<VivendiResource> GetChildren() => Enumerable.Empty<VivendiResource>();
 
-        DateTime GetDate(string select)
+        private DateTime GetDate(string select)
         {
             // query a date over all documents with the given target table and index, if any
             EnsureCanRead();
@@ -293,16 +293,16 @@ GROUP BY
         public virtual VivendiDocument NewDocument(string name, DateTime creationDate, DateTime lastModified, byte[] data) => throw VivendiException.DocumentNotAllowedInCollection();
     }
 
-    sealed class VivendiStaticCollection : VivendiCollection
+    internal sealed class VivendiStaticCollection : VivendiCollection
     {
-        readonly FileAttributes _attributes;
-        readonly DateTime _buildTime;
+        private readonly FileAttributes _attributes;
+        private readonly DateTime _buildTime;
 
         internal VivendiStaticCollection(VivendiCollection parent, string name, FileAttributes attributes)
         : base(parent, VivendiResourceType.Named, 0, name)
         {
             _buildTime = DateTime.Now;
-            _attributes = FileAttributes.ReadOnly | FileAttributes.System | (attributes ^ FileAttributes.Normal);
+            _attributes = FileAttributes.ReadOnly | FileAttributes.System | (attributes & ~FileAttributes.Normal);
         }
 
         public override FileAttributes Attributes
@@ -326,7 +326,7 @@ GROUP BY
         }
     }
 
-    sealed class VivendiObjectInstanceCollection : VivendiCollection
+    internal sealed class VivendiObjectInstanceCollection : VivendiCollection
     {
         internal VivendiObjectInstanceCollection(VivendiCollection parent, int? id, string name, IEnumerable<int> sections)
         : base(parent, VivendiResourceType.ObjectInstanceCollection, id ?? 0, name)
@@ -340,38 +340,36 @@ GROUP BY
         protected override IEnumerable<VivendiResource> GetChildren() => VivendiStoreCollection.QueryAll(this);
     }
 
-    sealed class VivendiObjectTypeCollection : VivendiCollection
+    internal sealed class VivendiObjectTypeCollection : VivendiCollection
     {
-        readonly VivendiObjectInstanceCollection _nullInstance;
-        readonly string _query;
+        private readonly VivendiObjectInstanceCollection _nullInstance;
+        private readonly string _query;
 
         internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string name, string query)
         : base(parent, VivendiResourceType.ObjectTypeCollection, type, name)
         {
-            _query = query ?? throw new ArgumentNullException("query");
+            _query = query ?? throw new ArgumentNullException(nameof(query));
             ObjectType = type;
         }
 
         internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string name, string query, string nullInstanceName)
         : this(parent, type, name, query)
         {
-            _nullInstance = new VivendiObjectInstanceCollection(this, null, nullInstanceName ?? throw new ArgumentNullException("nullInstanceName"), null);
+            _nullInstance = new VivendiObjectInstanceCollection(this, null, nullInstanceName ?? throw new ArgumentNullException(nameof(nullInstanceName)), null);
         }
 
-        IEnumerable<VivendiObjectInstanceCollection> Query(object id)
+        private IEnumerable<VivendiObjectInstanceCollection> Query(object id)
         {
-            using (var reader = Vivendi.ExecuteReader(VivendiSource.Data, _query, new SqlParameter("ID", id), new SqlParameter("ShowAll", ShowAll), new SqlParameter("Today", DateTime.Today)))
+            using var reader = Vivendi.ExecuteReader(VivendiSource.Data, _query, new SqlParameter("ID", id), new SqlParameter("ShowAll", ShowAll), new SqlParameter("Today", DateTime.Today));
+            while (reader.Read())
             {
-                while (reader.Read())
-                {
-                    yield return new VivendiObjectInstanceCollection
-                    (
-                        this,
-                        reader.GetInt32("ID"),
-                        reader.GetString("Name"),
-                        reader.GetIDsOptional("Sections")
-                    );
-                }
+                yield return new VivendiObjectInstanceCollection
+                (
+                    this,
+                    reader.GetInt32("ID"),
+                    reader.GetString("Name"),
+                    reader.GetIDsOptional("Sections")
+                );
             }
         }
 
@@ -389,19 +387,17 @@ GROUP BY
         }
     }
 
-    sealed class VivendiStoreCollection : VivendiCollection
+    internal sealed class VivendiStoreCollection : VivendiCollection
     {
-        static IEnumerable<VivendiStoreCollection> Query(VivendiCollection parent, object id)
+        private static IEnumerable<VivendiStoreCollection> Query(VivendiCollection parent, object id)
         {
-            if (!(parent ?? throw new ArgumentNullException("parent")).HasObjectInstance)
+            if (!(parent ?? throw new ArgumentNullException(nameof(parent))).HasObjectInstance)
             {
-                throw new ArgumentException("No object instance has been set on the parent collection.", "parent");
+                throw new ArgumentException("No object instance has been set on the parent collection.", nameof(parent));
             }
-            using
+            using var reader = parent.Vivendi.ExecuteReader
             (
-                var reader = parent.Vivendi.ExecuteReader
-                (
-                    VivendiSource.Store,
+                VivendiSource.Store,
                     @"
 SELECT
     [Z_DAT] AS [ID],
@@ -420,25 +416,22 @@ WHERE
     [bZippen] = 0 AND                                                            -- no zipped collections (because not reproducable in Vivendi)
     [DmsSuchkontext] IS NULL                                                     -- no external archives
 ",
-                    new SqlParameter("ID", id),
-                    new SqlParameter("ObjectType", parent.ObjectType),
-                    new SqlParameter("Parent", parent is VivendiStoreCollection ? (object)parent.ID : DBNull.Value)
-                )
-            )
+                new SqlParameter("ID", id),
+                new SqlParameter("ObjectType", parent.ObjectType),
+                new SqlParameter("Parent", parent is VivendiStoreCollection ? (object)parent.ID : DBNull.Value)
+            );
+            while (reader.Read())
             {
-                while (reader.Read())
-                {
-                    yield return new VivendiStoreCollection
-                    (
-                        parent,
-                        reader.GetInt32("ID"),
-                        reader.GetString("Name"),
-                        reader.GetInt32Optional("MaxDocumentSize"),
-                        reader.GetInt32Optional("AccessLevel") ?? 0,
-                        reader.GetIDsOptional("Sections"),
-                        reader.GetInt32Optional("LockAfterMonths")
-                    );
-                }
+                yield return new VivendiStoreCollection
+                (
+                    parent,
+                    reader.GetInt32("ID"),
+                    reader.GetString("Name"),
+                    reader.GetInt32Optional("MaxDocumentSize"),
+                    reader.GetInt32Optional("AccessLevel") ?? 0,
+                    reader.GetIDsOptional("Sections"),
+                    reader.GetInt32Optional("LockAfterMonths")
+                );
             }
         }
 
@@ -446,7 +439,7 @@ WHERE
 
         internal static VivendiStoreCollection QueryOne(VivendiCollection parent, int id) => Query(parent, id).SingleOrDefault();
 
-        VivendiStoreCollection(VivendiCollection parent, int id, string name, int? maxDocumentSize, int accessLevel, IEnumerable<int> sections, int? lockAfterMonths)
+        private VivendiStoreCollection(VivendiCollection parent, int id, string name, int? maxDocumentSize, int accessLevel, IEnumerable<int> sections, int? lockAfterMonths)
         : base(parent, VivendiResourceType.StoreCollection, id, name)
         {
             MaxDocumentSize = maxDocumentSize == 0 ? null : maxDocumentSize;
@@ -461,15 +454,12 @@ WHERE
 
         protected override VivendiResource GetChildByName(string name) => VivendiStoreDocument.QueryByName(this, name);
 
-        protected override VivendiResource GetChildByID(VivendiResourceType type, int id)
+        protected override VivendiResource GetChildByID(VivendiResourceType type, int id) => type switch
         {
-            switch (type)
-            {
-                case VivendiResourceType.StoreDocument: return VivendiStoreDocument.QueryByID(this, id);
-                case VivendiResourceType.StoreCollection: return VivendiStoreCollection.QueryOne(this, id);
-                default: return null;
-            }
-        }
+            VivendiResourceType.StoreDocument => VivendiStoreDocument.QueryByID(this, id),
+            VivendiResourceType.StoreCollection => VivendiStoreCollection.QueryOne(this, id),
+            _ => null,
+        };
 
         protected override IEnumerable<VivendiResource> GetChildren() => Enumerable.Empty<VivendiResource>().Concat(VivendiStoreDocument.QueryAll(this)).Concat(VivendiStoreCollection.QueryAll(this));
 

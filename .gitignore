@@ -1,2 +1,4 @@
-[Bb]in/
-web.config
+/.*/
+/[Bb]in/
+/[Oo]bj/
+/web.config

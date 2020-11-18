@@ -22,14 +22,13 @@ namespace Aufbauwerk.Tools.Vivendi
 {
     public sealed class VivendiException : ExternalException
     {
-        const int ERROR_ACCESS_DENIED = 5;
-        const int ERROR_BAD_PATHNAME = 161;
-        const int ERROR_FILE_CORRUPT = 1392;
-        const int ERROR_FILE_TOO_LARGE = 223;
-        const int ERROR_FILENAME_EXCED_RANGE = 206;
-        const int ERROR_LOCK_VIOLATION = 33;
-        const int ERROR_NOT_SUPPORTED = 50;
-        const int FACILITY_WIN32 = 7;
+        private const int ERROR_ACCESS_DENIED = 5;
+        private const int ERROR_BAD_PATHNAME = 161;
+        private const int ERROR_FILE_TOO_LARGE = 223;
+        private const int ERROR_FILENAME_EXCED_RANGE = 206;
+        private const int ERROR_LOCK_VIOLATION = 33;
+        private const int ERROR_NOT_SUPPORTED = 50;
+        private const int FACILITY_WIN32 = 7;
 
         internal static VivendiException DocumentContainsAdditionalLinks() => new VivendiException("The document contains additional links and should therefore only be modified within Vivendi.");
         internal static VivendiException DocumentHasDifferentOwner() => new VivendiException("The document was uploaded by a different user.");
@@ -44,11 +43,11 @@ namespace Aufbauwerk.Tools.Vivendi
         internal static VivendiException ResourcePropertyIsReadonly([CallerMemberName]string propertyName = "") => new VivendiException($"The property {propertyName} is read-only.");
         internal static VivendiException ResourceRequiresHigherAccessLevel() => new VivendiException("Insufficent access level.");
 
-        VivendiException(string message)
+        private VivendiException(string message)
         : this(ERROR_ACCESS_DENIED, message)
         { }
 
-        VivendiException(int errorCode, string message)
+        private VivendiException(int errorCode, string message)
         : base(message)
         {
             ErrorCode = errorCode;

@@ -35,12 +35,12 @@ namespace Aufbauwerk.Tools.Vivendi
         public static readonly StringComparison PathComparison = StringComparison.OrdinalIgnoreCase;
         public static readonly StringComparer PathComparer = StringComparer.OrdinalIgnoreCase;
 
-        readonly IDictionary<VivendiSource, string> _connectionStrings;
-        short _maxReadAccessLevel;
-        short _maxWriteAccessLevel;
-        readonly IDictionary<int, short> _readAccessLevels = new Dictionary<int, short>();
-        readonly IDictionary<int, ISet<int>> _sections = new Dictionary<int, ISet<int>>();
-        readonly IDictionary<int, short> _writeAccessLevels = new Dictionary<int, short>();
+        private readonly IDictionary<VivendiSource, string> _connectionStrings;
+        private short _maxReadAccessLevel;
+        private short _maxWriteAccessLevel;
+        private readonly IDictionary<int, short> _readAccessLevels = new Dictionary<int, short>();
+        private readonly IDictionary<int, ISet<int>> _sections = new Dictionary<int, ISet<int>>();
+        private readonly IDictionary<int, short> _writeAccessLevels = new Dictionary<int, short>();
 
         internal Vivendi(VivendiCollection parent, string name, string userName, SecurityIdentifier userSid, IDictionary<VivendiSource, string> connectionStrings)
         : this(parent, VivendiResourceType.Named, name, userName, userSid, connectionStrings)
@@ -54,13 +54,13 @@ namespace Aufbauwerk.Tools.Vivendi
         : this(null, VivendiResourceType.Root, name, userName, userSid, connectionStrings)
         { }
 
-        Vivendi(VivendiCollection parent, VivendiResourceType type, string name, string userName, SecurityIdentifier userSid, IDictionary<VivendiSource, string> connectionStrings)
+        private Vivendi(VivendiCollection parent, VivendiResourceType type, string name, string userName, SecurityIdentifier userSid, IDictionary<VivendiSource, string> connectionStrings)
         : base(parent, type, 0, name)
         {
             // set all properties
-            UserName = userName ?? throw new ArgumentNullException("userName");
-            UserSid = userSid ?? throw new ArgumentNullException("userSid");
-            _connectionStrings = connectionStrings ?? throw new ArgumentNullException("connectionStrings");
+            UserName = userName ?? throw new ArgumentNullException(nameof(userName));
+            UserSid = userSid ?? throw new ArgumentNullException(nameof(userSid));
+            _connectionStrings = connectionStrings ?? throw new ArgumentNullException(nameof(connectionStrings));
 
             // query the permissions
             InitializePermissions();
@@ -74,7 +74,7 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public SecurityIdentifier UserSid { get; }
 
-        void AddAccessLevel(IDictionary<int, short> map, short accessLevel, ref short maxAccessLevel, int section)
+        private void AddAccessLevel(IDictionary<int, short> map, short accessLevel, ref short maxAccessLevel, int section)
         {
             // determine and set the maximum access level for the given section and globaly
             if (!map.TryGetValue(section, out var maxAccessLevelForSection) || accessLevel > maxAccessLevelForSection)
@@ -87,7 +87,7 @@ namespace Aufbauwerk.Tools.Vivendi
             }
         }
 
-        void AddAccessLevel(IDictionary<int, short> map, short accessLevel, ref short maxAccessLevel, int section, IEnumerable<int> children)
+        private void AddAccessLevel(IDictionary<int, short> map, short accessLevel, ref short maxAccessLevel, int section, IEnumerable<int> children)
         {
             // set the access level of the given section and all its children
             AddAccessLevel(map, accessLevel, ref maxAccessLevel, section);
@@ -100,7 +100,7 @@ namespace Aufbauwerk.Tools.Vivendi
             }
         }
 
-        void AddSection(int objectType, int section, IEnumerable<int> children)
+        private void AddSection(int objectType, int section, IEnumerable<int> children)
         {
             // create the section set for the given object type if necessary
             if (!_sections.TryGetValue(objectType, out var sections))
@@ -116,10 +116,10 @@ namespace Aufbauwerk.Tools.Vivendi
             }
         }
 
-        SqlCommand BuildCommand(SqlConnection connection, string commandText, SqlParameter[] parameters)
+        private SqlCommand BuildCommand(SqlConnection connection, string commandText, SqlParameter[] parameters)
         {
             // create the command object
-            var command = new SqlCommand(commandText ?? throw new ArgumentNullException("commandText"), connection);
+            var command = new SqlCommand(commandText ?? throw new ArgumentNullException(nameof(commandText)), connection);
             if (parameters != null)
             {
                 command.Parameters.AddRange(parameters);
@@ -130,10 +130,8 @@ namespace Aufbauwerk.Tools.Vivendi
         internal int ExecuteNonQuery(VivendiSource source, string commandText, params SqlParameter[] parameters)
         {
             // run a INSERT, UPDATE or DELETE command and return the affected rows
-            using (var connection = OpenConnection(source))
-            {
-                return BuildCommand(connection, commandText, parameters).ExecuteNonQuery();
-            }
+            using var connection = OpenConnection(source);
+            return BuildCommand(connection, commandText, parameters).ExecuteNonQuery();
         }
 
         internal SqlDataReader ExecuteReader(VivendiSource source, string commandText, params SqlParameter[] parameters)
@@ -145,10 +143,8 @@ namespace Aufbauwerk.Tools.Vivendi
         internal object ExecuteScalar(VivendiSource source, string commandText, params SqlParameter[] parameters)
         {
             // run a simple query
-            using (var connection = OpenConnection(source))
-            {
-                return BuildCommand(connection, commandText, parameters).ExecuteScalar();
-            }
+            using var connection = OpenConnection(source);
+            return BuildCommand(connection, commandText, parameters).ExecuteScalar();
         }
 
         internal int GetReadAccessLevel(IEnumerable<int> sections) => sections == null ? _maxReadAccessLevel : sections.Max(s => _readAccessLevels.TryGetValue(s, out var level) ? level : 0);
@@ -159,14 +155,12 @@ namespace Aufbauwerk.Tools.Vivendi
 
         internal IEnumerable<int> GetWritableSections(int objectType) => GetReadableSections(objectType);
 
-        void InitializePermissions()
+        private void InitializePermissions()
         {
             // query the user's permissions
-            using
+            using var reader = ExecuteReader
             (
-                var reader = ExecuteReader
-                (
-                    VivendiSource.Data,
+                VivendiSource.Data,
                     @"
 WITH [HIERARCHY]([ID], [Parent]) AS
 (
@@ -200,50 +194,48 @@ WHERE
     [dbo].[BERECHTIGUNGEN].[Vorgang] IN (71, 1, 3) AND
     ([dbo].[BERECHTIGUNGEN].[Auflisten] > 0 OR [dbo].[BERECHTIGUNGEN].[Schreiben] > 0)
 ",
-                    new SqlParameter("UserName", UserName),
-                    new SqlParameter("Today", DateTime.Today)
-                )
-            )
+                new SqlParameter("UserName", UserName),
+                new SqlParameter("Today", DateTime.Today)
+            );
+
+            // build a map with all sections containg children
+            var sectionChildren = new Dictionary<int, IEnumerable<int>>();
+            while (reader.Read())
             {
-                // build a map with all sections containg children
-                var sectionChildren = new Dictionary<int, IEnumerable<int>>();
+                sectionChildren.Add(reader.GetInt32("Parent"), reader.GetIDs("IDs").ToHashSet());
+            }
+
+            // get to the next query result
+            if (reader.NextResult())
+            {
+                // parse all permissions
                 while (reader.Read())
                 {
-                    sectionChildren.Add(reader.GetInt32("Parent"), reader.GetIDs("IDs").ToHashSet());
-                }
-
-                // get to the next query result
-                if (reader.NextResult())
-                {
-                    // parse all permissions
-                    while (reader.Read())
+                    var section = reader.GetInt32Optional("Section") ?? 0;
+                    sectionChildren.TryGetValue(section, out var children);
+                    switch (reader.GetInt32("Permission"))
                     {
-                        var section = reader.GetInt32Optional("Section") ?? 0;
-                        sectionChildren.TryGetValue(section, out var children);
-                        switch (reader.GetInt32("Permission"))
-                        {
-                            case 71: // Dateiablage
-                                AddAccessLevel(_readAccessLevels, reader.GetInt16("Read"), ref _maxReadAccessLevel, section, children);
-                                AddAccessLevel(_writeAccessLevels, reader.GetInt16("Write"), ref _maxWriteAccessLevel, section, children);
-                                break;
-                            case 1: // Mitarbeiter
-                                AddSection(0, section, children);
-                                break;
-                            case 3: // Klient
-                                AddSection(1, section, children);
-                                break;
-                        }
+                        case 71: // Dateiablage
+                            AddAccessLevel(_readAccessLevels, reader.GetInt16("Read"), ref _maxReadAccessLevel, section, children);
+                            AddAccessLevel(_writeAccessLevels, reader.GetInt16("Write"), ref _maxWriteAccessLevel, section, children);
+                            break;
+                        case 1: // Mitarbeiter
+                            AddSection(0, section, children);
+                            break;
+                        case 3: // Klient
+                            AddSection(1, section, children);
+                            break;
                     }
                 }
             }
         }
 
-        SqlConnection OpenConnection(VivendiSource source)
+        private SqlConnection OpenConnection(VivendiSource source)
         {
             // get the corresponding connection string and open the connection
             if (!_connectionStrings.TryGetValue(source, out var connectionString))
             {
-                throw new InvalidEnumArgumentException("source", (int)source, typeof(VivendiSource));
+                throw new InvalidEnumArgumentException(nameof(source), (int)source, typeof(VivendiSource));
             }
             var connection = new SqlConnection(connectionString);
             connection.Open();

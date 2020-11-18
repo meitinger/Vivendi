@@ -23,7 +23,7 @@ using System.Linq;
 
 public static class VivendiSqlExtensions
 {
-    static T? GetOptional<T>(Func<int, T> readerAccessor, string column) where T : struct
+    private static T? GetOptional<T>(Func<int, T> readerAccessor, string column) where T : struct
     {
         var reader = (SqlDataReader)readerAccessor.Target;
         var i = reader.GetOrdinal(column);

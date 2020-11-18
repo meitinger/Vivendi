@@ -42,20 +42,22 @@ namespace Aufbauwerk.Tools.Vivendi
         public abstract void MoveTo(VivendiCollection destCollection, string destName);
     }
 
-    sealed class VivendiStaticDocument : VivendiDocument
+    internal sealed class VivendiStaticDocument : VivendiDocument
     {
-        FileAttributes _attributes;
-        readonly DateTime _buildTime;
-        readonly byte[] _data;
-        readonly VivendiCollection _parent;
+        private readonly FileAttributes _attributes;
+        private readonly DateTime _buildTime;
+        private readonly byte[] _data;
 
         internal VivendiStaticDocument(VivendiCollection parent, string name, FileAttributes attributes, byte[] data)
         : base(parent, VivendiResourceType.Named, 0, name)
         {
+            if (parent == null)
+            {
+                throw new ArgumentNullException(nameof(parent));
+            }
             _buildTime = DateTime.Now;
-            _parent = parent ?? throw new ArgumentNullException("parent");
-            _attributes = FileAttributes.ReadOnly | (attributes ^ FileAttributes.Normal);
-            _data = data ?? throw new ArgumentNullException("data");
+            _attributes = FileAttributes.ReadOnly | (attributes & ~FileAttributes.Normal);
+            _data = data ?? throw new ArgumentNullException(nameof(data));
         }
 
         public override FileAttributes Attributes
@@ -97,11 +99,11 @@ namespace Aufbauwerk.Tools.Vivendi
         public override void MoveTo(VivendiCollection destCollection, string destName) => throw VivendiException.ResourceIsStatic();
     }
 
-    sealed class VivendiStoreDocument : VivendiDocument
+    internal sealed class VivendiStoreDocument : VivendiDocument
     {
-        const string WEBDAV_PREFIX = "webdav:v1:";
+        private const string WEBDAV_PREFIX = "webdav:v1:";
 
-        class Template
+        private class Template
         {
             public Template(VivendiStoreCollection parent, int id, bool additionalTargets, int? section, SecurityIdentifier owner, string displayName, DateTime creationDate, DateTime lastModified, int size, DateTime? lockDate)
             {
@@ -134,15 +136,15 @@ namespace Aufbauwerk.Tools.Vivendi
         {
             if (parent == null)
             {
-                throw new ArgumentNullException("parent");
+                throw new ArgumentNullException(nameof(parent));
             }
             if (name == null)
             {
-                throw new ArgumentNullException("name");
+                throw new ArgumentNullException(nameof(name));
             }
             if (data == null)
             {
-                throw new ArgumentNullException("data");
+                throw new ArgumentNullException(nameof(data));
             }
             EnsureValidName(ref name);
             parent.EnsureCanWrite();
@@ -207,7 +209,7 @@ VALUES
             return new VivendiStoreDocument(parent, (int)id.Value, owner, name, creationDate, lastModified, data, lockDate);
         }
 
-        static void EnsureNameLength(string name)
+        private static void EnsureNameLength(string name)
         {
             // make sure the name is not empty of too long
             const int MaxLength = 255;
@@ -221,7 +223,7 @@ VALUES
             }
         }
 
-        static void EnsureSize(int? maxSize, int documentSize)
+        private static void EnsureSize(int? maxSize, int documentSize)
         {
             // make sure the document doesn't exceed the collection's size limit
             if (maxSize.HasValue && documentSize > maxSize.Value)
@@ -230,7 +232,7 @@ VALUES
             }
         }
 
-        static void EnsureValidName(ref string name)
+        private static void EnsureValidName(ref string name)
         {
             // remove trailing dots, check the length and characters
             name = name.TrimEnd('.');
@@ -241,80 +243,79 @@ VALUES
             }
         }
 
-        static string FormatOwner(SecurityIdentifier owner) => WEBDAV_PREFIX + owner;
+        private static string FormatOwner(SecurityIdentifier owner) => WEBDAV_PREFIX + owner;
 
-        static IEnumerable<VivendiStoreDocument> FromNamedTemplates(IEnumerable<Template> templates, SecurityIdentifier owner, bool allowTyped)
+        private static IEnumerable<VivendiStoreDocument> FromNamedTemplates(IEnumerable<Template> templates, SecurityIdentifier owner, bool allowTyped)
         {
-            using (var enumerator = templates.GetEnumerator())
+            using var enumerator = templates.GetEnumerator();
+
+            // return nothing if there are no documents
+            if (!enumerator.MoveNext())
             {
-                // return nothing if there are no documents
-                if (!enumerator.MoveNext())
+                yield break;
+            }
+
+            // check if there is more than one document
+            var template = enumerator.Current;
+            if (enumerator.MoveNext())
+            {
+                // let's see if there is just one document owned by the current user
+                var hasOwned = template.Owner == owner;
+
+                // return the first document as typed if we allow typed documents and it's not owned
+                if (allowTyped && !hasOwned)
+                {
+                    yield return new VivendiStoreDocument(false, template);
+                }
+
+                // check the owner of the remaining documents
+                do
+                {
+                    var current = enumerator.Current;
+                    if (current.Owner == owner)
+                    {
+                        // check if this is the second document owned by the user
+                        if (hasOwned)
+                        {
+                            // return all remaining documents as typed if allowed and exit
+                            if (allowTyped)
+                            {
+                                yield return new VivendiStoreDocument(false, template);
+                                yield return new VivendiStoreDocument(false, current);
+                                while (enumerator.MoveNext())
+                                {
+                                    yield return new VivendiStoreDocument(false, enumerator.Current);
+                                }
+                            }
+                            yield break;
+                        }
+
+                        // store the template
+                        template = current;
+                        hasOwned = true;
+                    }
+                    else
+                    {
+                        // not owned, return the document as typed if allowed
+                        if (allowTyped)
+                        {
+                            yield return new VivendiStoreDocument(false, current);
+                        }
+                    }
+                } while (enumerator.MoveNext());
+
+                // there are more documents but none is owned by the user, exit
+                if (!hasOwned)
                 {
                     yield break;
                 }
-
-                // check if there is more than one document
-                var template = enumerator.Current;
-                if (enumerator.MoveNext())
-                {
-                    // let's see if there is just one document owned by the current user
-                    var hasOwned = template.Owner == owner;
-
-                    // return the first document as typed if we allow typed documents and it's not owned
-                    if (allowTyped && !hasOwned)
-                    {
-                        yield return new VivendiStoreDocument(false, template);
-                    }
-
-                    // check the owner of the remaining documents
-                    do
-                    {
-                        var current = enumerator.Current;
-                        if (current.Owner == owner)
-                        {
-                            // check if this is the second document owned by the user
-                            if (hasOwned)
-                            {
-                                // return all remaining documents as typed if allowed and exit
-                                if (allowTyped)
-                                {
-                                    yield return new VivendiStoreDocument(false, template);
-                                    yield return new VivendiStoreDocument(false, current);
-                                    while (enumerator.MoveNext())
-                                    {
-                                        yield return new VivendiStoreDocument(false, enumerator.Current);
-                                    }
-                                }
-                                yield break;
-                            }
-
-                            // store the template
-                            template = current;
-                            hasOwned = true;
-                        }
-                        else
-                        {
-                            // not owned, return the document as typed if allowed
-                            if (allowTyped)
-                            {
-                                yield return new VivendiStoreDocument(false, current);
-                            }
-                        }
-                    } while (enumerator.MoveNext());
-
-                    // there are more documents but none is owned by the user, exit
-                    if (!hasOwned)
-                    {
-                        yield break;
-                    }
-                }
-
-                // return the named document
-                yield return new VivendiStoreDocument(true, template);
             }
+
+            // return the named document
+            yield return new VivendiStoreDocument(true, template);
         }
 
-        static SecurityIdentifier ParseOwner(string location)
+        private static SecurityIdentifier ParseOwner(string location)
         {
             // check the prefix and parse the sid
             if (!location.StartsWith(WEBDAV_PREFIX, StringComparison.OrdinalIgnoreCase))
@@ -326,14 +327,12 @@ VALUES
             catch (ArgumentException) { return null; }
         }
 
-        static IEnumerable<Template> Query(VivendiStoreCollection parent, object id)
+        private static IEnumerable<Template> Query(VivendiStoreCollection parent, object id)
         {
-            using
+            using var reader = parent.Vivendi.ExecuteReader
             (
-                var reader = parent.Vivendi.ExecuteReader
-                (
-                    VivendiSource.Store,
-                    @"
+                VivendiSource.Store,
+                @"
 SELECT
     [Z_DA] AS [ID],
     CONVERT(bit, CASE WHEN [ZielTabelle2] IS NOT NULL OR [ZielTabelle3] IS NOT NULL THEN 1 ELSE 0 END) AS [AdditionalTargets],
@@ -353,36 +352,33 @@ WHERE
     [ZielTabelle1] = @TargetTable AND                                                  -- query for a object type
     [bGeZippt] = 0                                                                     -- no zipped docs (because not reproducable in Vivendi)
 ",
-                    new SqlParameter("ID", id),
-                    new SqlParameter("Parent", parent.ID),
-                    new SqlParameter("TargetIndex", (object)parent.ObjectID ?? DBNull.Value),
-                    new SqlParameter("TargetTable", parent.ObjectType)
-                )
-            )
+                new SqlParameter("ID", id),
+                new SqlParameter("Parent", parent.ID),
+                new SqlParameter("TargetIndex", (object)parent.ObjectID ?? DBNull.Value),
+                new SqlParameter("TargetTable", parent.ObjectType)
+            );
+            while (reader.Read())
             {
-                while (reader.Read())
-                {
-                    yield return new Template
-                    (
-                        parent,
-                        reader.GetInt32("ID"),
-                        reader.GetBoolean("AdditionalTargets"),
-                        reader.GetInt32Optional("Section"),
-                        ParseOwner(reader.GetStringOptional("Location")),
-                        reader.GetString("DisplayName"),
-                        reader.GetDateTime("CreationDate"),
-                        reader.GetDateTime("LastModified"),
-                        reader.GetInt32("Size"),
-                        reader.GetDateTimeOptional("LockDate")
-                    );
-                }
+                yield return new Template
+                (
+                    parent,
+                    reader.GetInt32("ID"),
+                    reader.GetBoolean("AdditionalTargets"),
+                    reader.GetInt32Optional("Section"),
+                    ParseOwner(reader.GetStringOptional("Location")),
+                    reader.GetString("DisplayName"),
+                    reader.GetDateTime("CreationDate"),
+                    reader.GetDateTime("LastModified"),
+                    reader.GetInt32("Size"),
+                    reader.GetDateTimeOptional("LockDate")
+                );
             }
         }
 
         internal static IEnumerable<VivendiStoreDocument> QueryAll(VivendiStoreCollection parent)
         {
             // cache the owner and return all documents
-            var owner = (parent ?? throw new ArgumentNullException("parent")).Vivendi.UserSid;
+            var owner = (parent ?? throw new ArgumentNullException(nameof(parent))).Vivendi.UserSid;
             return Query(parent, DBNull.Value)
                 .ToLookup(t => t.DisplayName, Vivendi.PathComparer)
                 .SelectMany
@@ -394,34 +390,34 @@ WHERE
                 );
         }
 
-        internal static VivendiStoreDocument QueryByID(VivendiStoreCollection parent, int id) => Query(parent ?? throw new ArgumentNullException("parent"), id).Select(t => new VivendiStoreDocument(false, t)).SingleOrDefault();
+        internal static VivendiStoreDocument QueryByID(VivendiStoreCollection parent, int id) => Query(parent ?? throw new ArgumentNullException(nameof(parent)), id).Select(t => new VivendiStoreDocument(false, t)).SingleOrDefault();
 
         internal static VivendiStoreDocument QueryByName(VivendiStoreCollection parent, string name)
         {
             // check the arguments and return the document with the given name, if there is just one (or just one owned by the current user)
             if (parent == null)
             {
-                throw new ArgumentNullException("parent");
+                throw new ArgumentNullException(nameof(parent));
             }
             if (name == null)
             {
-                throw new ArgumentNullException("name");
+                throw new ArgumentNullException(nameof(name));
             }
             return FromNamedTemplates(Query(parent, DBNull.Value).Where(t => string.Equals(t.DisplayName, name, Vivendi.PathComparison)), parent.Vivendi.UserSid, false).SingleOrDefault();
         }
 
-        bool _additionalTargets;
-        DateTime _creationDate;
-        byte[] _data;
-        string _displayName;
-        bool _isDeletedOrMoved;
-        DateTime _lastModified;
-        DateTime? _lockDate;
-        SecurityIdentifier _owner;
-        VivendiStoreCollection _parent;
-        int _size;
+        private readonly bool _additionalTargets;
+        private DateTime _creationDate;
+        private byte[] _data;
+        private string _displayName;
+        private bool _isDeletedOrMoved;
+        private DateTime _lastModified;
+        private readonly DateTime? _lockDate;
+        private readonly SecurityIdentifier _owner;
+        private readonly VivendiStoreCollection _parent;
+        private int _size;
 
-        VivendiStoreDocument(bool isNamed, Template template)
+        private VivendiStoreDocument(bool isNamed, Template template)
         : base(template.Parent, isNamed ? VivendiResourceType.Named : VivendiResourceType.StoreDocument, template.ID, template.DisplayName)
         {
             _parent = template.Parent;
@@ -440,7 +436,7 @@ WHERE
 
         }
 
-        VivendiStoreDocument(VivendiStoreCollection parent, int id, SecurityIdentifier owner, string displayName, DateTime creationDate, DateTime lastModified, byte[] data, DateTime? lockDate)
+        private VivendiStoreDocument(VivendiStoreCollection parent, int id, SecurityIdentifier owner, string displayName, DateTime creationDate, DateTime lastModified, byte[] data, DateTime? lockDate)
         : base(parent, VivendiResourceType.StoreDocument, id, displayName)
         {
             _parent = parent;
@@ -518,7 +514,7 @@ WHERE [Z_DA] = @ID
                 // check the value and whether the document still exists
                 if (value == null)
                 {
-                    throw new ArgumentNullException("Data");
+                    throw new ArgumentNullException(nameof(Data));
                 }
                 EnsureNotDeletedOrMoved();
 
@@ -561,7 +557,7 @@ WHERE [Z_DA] = @ID
             set
             {
                 // check the value and ensure the document still exists
-                EnsureNameLength(value ?? throw new ArgumentNullException("DisplayName"));
+                EnsureNameLength(value ?? throw new ArgumentNullException(nameof(DisplayName)));
                 EnsureNotDeletedOrMoved();
 
                 // update the document if the name has changed
@@ -629,7 +625,7 @@ WHERE [Z_DA] = @ID
             }
         }
 
-        bool CheckWrite(bool dontThrow)
+        private bool CheckWrite(bool dontThrow)
         {
             // check if the document is locked
             if (_lockDate.HasValue && DateTime.Now >= _lockDate.Value)
@@ -682,7 +678,7 @@ WHERE [Z_DA] = @ID
             CheckWrite(false);
         }
 
-        void EnsureNoAdditionalTargets()
+        private void EnsureNoAdditionalTargets()
         {
             // make sure that the document doesn't contain additional references like parents, sessions, etc.
             if (_additionalTargets)
@@ -691,7 +687,7 @@ WHERE [Z_DA] = @ID
             }
         }
 
-        void EnsureNotDeletedOrMoved()
+        private void EnsureNotDeletedOrMoved()
         {
             if (_isDeletedOrMoved)
             {
@@ -704,11 +700,11 @@ WHERE [Z_DA] = @ID
             // check the value and that the document stil exists
             if (destCollection == null)
             {
-                throw new ArgumentNullException("destCollection");
+                throw new ArgumentNullException(nameof(destCollection));
             }
             if (destName == null)
             {
-                throw new ArgumentNullException("destName");
+                throw new ArgumentNullException(nameof(destName));
             }
             var parent = destCollection as VivendiStoreCollection ?? throw VivendiException.DocumentNotAllowedInCollection();
             EnsureValidName(ref destName);

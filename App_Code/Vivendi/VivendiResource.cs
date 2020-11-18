@@ -17,10 +17,10 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
-using static System.FormattableString;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using static System.FormattableString;
 
 namespace Aufbauwerk.Tools.Vivendi
 {
@@ -36,14 +36,14 @@ namespace Aufbauwerk.Tools.Vivendi
 
     public abstract class VivendiResource
     {
-        static readonly char[] InvalidNameChars = new char[] { '"', '<', '>', '|', '\0', '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\a', '\b', '\t', '\n', '\v', '\f', '\r', '\u000e', '\u000f', '\u0010', '\u0011', '\u0012', '\u0013', '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001a', '\u001b', '\u001c', '\u001d', '\u001e', '\u001f', ':', '*', '?', '\\', '/' };
+        private static readonly char[] InvalidNameChars = new char[] { '"', '<', '>', '|', '\0', '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\a', '\b', '\t', '\n', '\v', '\f', '\r', '\u000e', '\u000f', '\u0010', '\u0011', '\u0012', '\u0013', '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001a', '\u001b', '\u001c', '\u001d', '\u001e', '\u001f', ':', '*', '?', '\\', '/' };
 
-        internal static bool IsValidName(string name) => (name ?? throw new ArgumentNullException("name")).IndexOfAny(InvalidNameChars) == -1;
+        internal static bool IsValidName(string name) => (name ?? throw new ArgumentNullException(nameof(name))).IndexOfAny(InvalidNameChars) == -1;
 
         internal static bool TryParseTypeAndID(string name, out VivendiResourceType type, out int id)
         {
             // remove the extension and parse the remaining name
-            var dot = (name ?? throw new ArgumentNullException("name")).LastIndexOf('.');
+            var dot = (name ?? throw new ArgumentNullException(nameof(name))).LastIndexOf('.');
             var typeAndId = (dot > -1 ? name.Substring(0, dot) : name).Split('-');
             if (typeAndId.Length == 2 && int.TryParse(typeAndId[0], NumberStyles.None, CultureInfo.InvariantCulture, out var typeNumeric) && int.TryParse(typeAndId[1], NumberStyles.None, CultureInfo.InvariantCulture, out id))
             {
@@ -59,31 +59,27 @@ namespace Aufbauwerk.Tools.Vivendi
         }
 
 
-        bool _hasObjectInstance = false;
-        bool _hasObjectType = false;
-        int? _objectID;
-        string _objectName;
-        int _objectType;
-        IEnumerable<int> _sections;
+        private bool _hasObjectInstance = false;
+        private bool _hasObjectType = false;
+        private int? _objectID;
+        private string _objectName;
+        private int _objectType;
+        private IEnumerable<int> _sections;
 
         internal VivendiResource(VivendiCollection parent, VivendiResourceType type, int id, string name)
         {
             // check the arguments
             if (!Enum.IsDefined(typeof(VivendiResourceType), type))
             {
-                throw new InvalidEnumArgumentException("type", (int)type, typeof(VivendiResourceType));
+                throw new InvalidEnumArgumentException(nameof(type), (int)type, typeof(VivendiResourceType));
             }
             if (id < 0)
             {
-                throw new ArgumentOutOfRangeException("id", "Resource IDs must be non-negative.");
+                throw new ArgumentOutOfRangeException(nameof(id), "Resource IDs must be non-negative.");
             }
             if (type == VivendiResourceType.Root ^ parent == null)
             {
                 throw new ArgumentException("Invalid type and parent combination.");
-            }
-            if (name == null)
-            {
-                throw new ArgumentNullException("name");
             }
 
             // set the non-computed values
@@ -93,7 +89,7 @@ namespace Aufbauwerk.Tools.Vivendi
 
             // get the extension and set the localized name
             var extension = string.Empty;
-            LocalizedName = name;
+            LocalizedName = name ?? throw new ArgumentNullException(nameof(name));
             if (!(this is VivendiCollection))
             {
                 var dot = name.LastIndexOf('.');
@@ -109,12 +105,12 @@ namespace Aufbauwerk.Tools.Vivendi
             }
 
             // set the name property based on the type
-            switch (type)
+            Name = type switch
             {
-                case VivendiResourceType.Root: Name = string.Empty; break;
-                case VivendiResourceType.Named: Name = name; break;
-                default: Name = Invariant($"{(int)type}-{id}{extension}"); break;
-            }
+                VivendiResourceType.Root => string.Empty,
+                VivendiResourceType.Named => name,
+                _ => Invariant($"{(int)type}-{id}{extension}"),
+            };
         }
 
         public virtual FileAttributes Attributes
@@ -195,7 +191,7 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public Vivendi Vivendi => SelfAndAncestors.OfType<Vivendi>().First();
 
-        bool CheckPermission(Func<IEnumerable<int>, int> getAccessLevel, Func<int, IEnumerable<int>> getSections, bool dontThrow)
+        private bool CheckPermission(Func<IEnumerable<int>, int> getAccessLevel, Func<int, IEnumerable<int>> getSections, bool dontThrow)
         {
             // make sure all access levels are sufficient
             if (SelfAndAncestors.Any(r => r.RequiredAccessLevel >= getAccessLevel(r.Sections)))
@@ -217,27 +213,27 @@ namespace Aufbauwerk.Tools.Vivendi
             return true;
         }
 
-        bool CheckRead(bool dontThrow) => CheckPermission(Vivendi.GetReadAccessLevel, Vivendi.GetReadableSections, dontThrow);
+        private bool CheckRead(bool dontThrow) => CheckPermission(Vivendi.GetReadAccessLevel, Vivendi.GetReadableSections, dontThrow);
 
-        bool CheckWrite(bool dontThrow) => CheckPermission(Vivendi.GetWriteAccessLevel, Vivendi.GetWritableSections, dontThrow);
+        private bool CheckWrite(bool dontThrow) => CheckPermission(Vivendi.GetWriteAccessLevel, Vivendi.GetWritableSections, dontThrow);
 
         internal virtual bool EnsureCanRead() => CheckRead(false);
 
         internal virtual void EnsureCanWrite() => CheckWrite(false);
 
-        T GetProp<T>(Func<VivendiResource, T> prop, Func<VivendiResource, bool> hasProp, string missing) => prop(SelfAndAncestors.FirstOrDefault(hasProp) ?? throw new InvalidOperationException(missing));
+        private T GetProp<T>(Func<VivendiResource, T> prop, Func<VivendiResource, bool> hasProp, string missing) => prop(SelfAndAncestors.FirstOrDefault(hasProp) ?? throw new InvalidOperationException(missing));
 
-        T GetInstanceProp<T>(Func<VivendiResource, T> prop) => GetProp(prop, r => r._hasObjectInstance, "Object instance has not been set.");
+        private T GetInstanceProp<T>(Func<VivendiResource, T> prop) => GetProp(prop, r => r._hasObjectInstance, "Object instance has not been set.");
 
         protected void SetObjectInstace(int? id, string name)
         {
             if (id < 1)
             {
-                throw new ArgumentOutOfRangeException("id", "An object's ID must be positive.");
+                throw new ArgumentOutOfRangeException(nameof(id), "An object's ID must be positive.");
             }
             if (name == null)
             {
-                throw new ArgumentNullException("name");
+                throw new ArgumentNullException(nameof(name));
             }
             if (!HasObjectType)
             {
