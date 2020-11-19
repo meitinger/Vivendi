@@ -51,10 +51,6 @@ namespace Aufbauwerk.Tools.Vivendi
         internal VivendiStaticDocument(VivendiCollection parent, string name, FileAttributes attributes, byte[] data)
         : base(parent, VivendiResourceType.Named, 0, name)
         {
-            if (parent == null)
-            {
-                throw new ArgumentNullException(nameof(parent));
-            }
             _buildTime = DateTime.Now;
             _attributes = FileAttributes.ReadOnly | (attributes & ~FileAttributes.Normal);
             _data = data ?? throw new ArgumentNullException(nameof(data));
@@ -155,7 +151,7 @@ namespace Aufbauwerk.Tools.Vivendi
             parent.Vivendi.ExecuteNonQuery
             (
                 VivendiSource.Store,
-                @"
+@"
 SELECT @ID = MAX([Z_DA]) + 1
 FROM [dbo].[DATEI_ABLAGE];
 INSERT INTO [dbo].[DATEI_ABLAGE]
@@ -332,7 +328,7 @@ VALUES
             using var reader = parent.Vivendi.ExecuteReader
             (
                 VivendiSource.Store,
-                @"
+@"
 SELECT
     [Z_DA] AS [ID],
     CONVERT(bit, CASE WHEN [ZielTabelle2] IS NOT NULL OR [ZielTabelle3] IS NOT NULL THEN 1 ELSE 0 END) AS [AdditionalTargets],
@@ -474,7 +470,7 @@ WHERE
                     Vivendi.ExecuteNonQuery
                     (
                         VivendiSource.Store,
-                        @"
+@"
 UPDATE [dbo].[DATEI_ABLAGE]
 SET [Dateidatum] = @CreationDate
 WHERE [Z_DA] = @ID
@@ -499,7 +495,7 @@ WHERE [Z_DA] = @ID
                     _data = (byte[])Vivendi.ExecuteScalar
                     (
                         VivendiSource.Store,
-                        @"
+@"
 SELECT [pDateiBlob]
 FROM [dbo].[DATEI_ABLAGE]
 WHERE [Z_DA] = @ID
@@ -527,7 +523,7 @@ WHERE [Z_DA] = @ID
                 Vivendi.ExecuteNonQuery
                 (
                     VivendiSource.Store,
-                    @"
+@"
 UPDATE [dbo].[DATEI_ABLAGE]
 SET
     [pDateiBlob] = @Blob,
@@ -567,7 +563,7 @@ WHERE [Z_DA] = @ID
                     Vivendi.ExecuteNonQuery
                     (
                         VivendiSource.Store,
-                        @"
+@"
 UPDATE [dbo].[DATEI_ABLAGE]
 SET [Dateiname] = @DisplayName
 WHERE [Z_DA] = @ID
@@ -600,7 +596,7 @@ WHERE [Z_DA] = @ID
                     Vivendi.ExecuteNonQuery
                     (
                         VivendiSource.Store,
-                        @"
+@"
 UPDATE [dbo].[DATEI_ABLAGE]
 SET
     [GeaendertDatum] = @LastModified,
@@ -662,7 +658,7 @@ WHERE [Z_DA] = @ID
             Vivendi.ExecuteNonQuery
             (
                 VivendiSource.Store,
-                @"
+@"
 DELETE FROM [dbo].[DATEI_ABLAGE]
 WHERE [Z_DA] = @ID
 ",
@@ -697,7 +693,7 @@ WHERE [Z_DA] = @ID
 
         public override void MoveTo(VivendiCollection destCollection, string destName)
         {
-            // check the value and that the document stil exists
+            // check the value and that the document still exists
             if (destCollection == null)
             {
                 throw new ArgumentNullException(nameof(destCollection));
@@ -719,7 +715,7 @@ WHERE [Z_DA] = @ID
             Vivendi.ExecuteNonQuery
             (
                 VivendiSource.Store,
-                @"
+@"
 UPDATE [dbo].[DATEI_ABLAGE]
 SET
     [iDokumentArt] = @Parent,

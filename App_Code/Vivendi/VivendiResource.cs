@@ -60,10 +60,9 @@ namespace Aufbauwerk.Tools.Vivendi
 
 
         private bool _hasObjectInstance = false;
-        private bool _hasObjectType = false;
         private int? _objectID;
         private string _objectName;
-        private int _objectType;
+        private int? _objectType;
         private IEnumerable<int> _sections;
 
         internal VivendiResource(VivendiCollection parent, VivendiResourceType type, int id, string name)
@@ -129,9 +128,9 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public abstract string DisplayName { get; set; }
 
-        internal bool HasObjectInstance => SelfAndAncestors.Any(r => r._hasObjectInstance);
+        internal bool HasObjectInstance => SelfAndAncestorsWithSameObjectType.Any(r => r._hasObjectInstance);
 
-        internal bool HasObjectType => SelfAndAncestors.Any(r => r._hasObjectType);
+        internal bool HasObjectType => SelfAndAncestors.Any(r => r._objectType.HasValue);
 
         internal int ID { get; }
 
@@ -143,18 +142,16 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public string Name { get; }
 
-        internal int? ObjectID => GetInstanceProp(r => r._objectID);
+        internal int? ObjectID => ObjectInstanceResource._objectID;
 
-        internal string ObjectName => GetInstanceProp(r => r._objectName);
+        private VivendiResource ObjectInstanceResource => SelfAndAncestorsWithSameObjectType.FirstOrDefault(r => r._hasObjectInstance) ?? throw new InvalidOperationException("Object instance has not been set.");
+
+        internal string ObjectName => ObjectInstanceResource._objectName;
 
         protected internal int ObjectType
         {
-            get { return GetProp(r => r._objectType, r => r._hasObjectType, "Object type has not been set."); }
-            protected set
-            {
-                _objectType = value;
-                _hasObjectType = true;
-            }
+            get => SelfAndAncestors.FirstOrDefault(r => r._objectType.HasValue)?._objectType ?? throw new InvalidOperationException("Object type has not been set.");
+            protected set => _objectType = value;
         }
 
         public string Path => Type == VivendiResourceType.Root ? "/" : string.Join("/", SelfAndAncestors.Reverse().Select(r => r.Name));
@@ -169,23 +166,9 @@ namespace Aufbauwerk.Tools.Vivendi
             protected set => _sections = value?.ToHashSet();
         }
 
-        internal IEnumerable<VivendiResource> SelfAndAncestors
-        {
-            get
-            {
-                // return this resource and all parent collections
-                var res = this;
-                while (true)
-                {
-                    yield return res;
-                    if (res.Type == VivendiResourceType.Root)
-                    {
-                        break;
-                    }
-                    res = res.Parent;
-                }
-            }
-        }
+        internal IEnumerable<VivendiResource> SelfAndAncestors => WalkParentTree(r => r.Type == VivendiResourceType.Root);
+
+        private IEnumerable<VivendiResource> SelfAndAncestorsWithSameObjectType => WalkParentTree(r => r.Type == VivendiResourceType.Root || r._objectType.HasValue);
 
         public VivendiResourceType Type { get; }
 
@@ -199,7 +182,7 @@ namespace Aufbauwerk.Tools.Vivendi
                 return dontThrow ? false : throw VivendiException.ResourceRequiresHigherAccessLevel();
             }
 
-            // if the resource has a type, make sure it's at least one of its section is accessable
+            // if the resource has a type, make sure it's at least one of its section is accessible
             if (HasObjectType)
             {
                 var grantedSections = getSections(ObjectType);
@@ -221,11 +204,7 @@ namespace Aufbauwerk.Tools.Vivendi
 
         internal virtual void EnsureCanWrite() => CheckWrite(false);
 
-        private T GetProp<T>(Func<VivendiResource, T> prop, Func<VivendiResource, bool> hasProp, string missing) => prop(SelfAndAncestors.FirstOrDefault(hasProp) ?? throw new InvalidOperationException(missing));
-
-        private T GetInstanceProp<T>(Func<VivendiResource, T> prop) => GetProp(prop, r => r._hasObjectInstance, "Object instance has not been set.");
-
-        protected void SetObjectInstace(int? id, string name)
+        protected void SetObjectInstance(int? id, string name)
         {
             if (id < 1)
             {
@@ -238,6 +217,20 @@ namespace Aufbauwerk.Tools.Vivendi
             _objectID = id;
             _objectName = name ?? throw new ArgumentNullException(nameof(name));
             _hasObjectInstance = true;
+        }
+
+        private IEnumerable<VivendiResource> WalkParentTree(Func<VivendiResource, bool> until)
+        {
+            var res = this;
+            while (true)
+            {
+                yield return res;
+                if (until(res))
+                {
+                    break;
+                }
+                res = res.Parent;
+            }
         }
     }
 }

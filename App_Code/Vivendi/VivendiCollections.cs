@@ -21,6 +21,7 @@ using System.IO;
 using System.Linq;
 using System.Security.Principal;
 using System.Text;
+using static System.FormattableString;
 
 namespace Aufbauwerk.Tools.Vivendi
 {
@@ -28,13 +29,18 @@ namespace Aufbauwerk.Tools.Vivendi
     {
         private const string DesktopIni = "desktop.ini";
 
+        private readonly DateTime? _creationDate;
+        private readonly DateTime? _lastModified;
         private readonly IDictionary<string, VivendiResource> _namedResources = new Dictionary<string, VivendiResource>(Vivendi.PathComparer);
         private bool _showAll = false;
         private readonly IDictionary<VivendiResourceType, IDictionary<int, VivendiResource>> _typedResources = new Dictionary<VivendiResourceType, IDictionary<int, VivendiResource>>();
 
-        internal VivendiCollection(VivendiCollection parent, VivendiResourceType type, int id, string name)
+        internal VivendiCollection(VivendiCollection parent, VivendiResourceType type, int id, string name, DateTime? creationDate = null, DateTime? lastModified = null)
         : base(parent, type, id, name)
-        { }
+        {
+            _creationDate = creationDate;
+            _lastModified = lastModified;
+        }
 
         public override FileAttributes Attributes => base.Attributes | FileAttributes.Directory | FileAttributes.ReadOnly;
 
@@ -61,7 +67,11 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public override DateTime CreationDate
         {
-            get => GetDate(@"MIN([Dateidatum])");
+            get
+            {
+                EnsureCanRead();
+                return _creationDate ?? Parent.CreationDate;
+            }
             set => throw VivendiException.ResourcePropertyIsReadonly();
         }
 
@@ -77,7 +87,11 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public override DateTime LastModified
         {
-            get => GetDate(@"MAX(ISNULL([GeaendertDatum],[Dateidatum]))");
+            get
+            {
+                EnsureCanRead();
+                return _lastModified ?? _creationDate ?? Parent.LastModified;
+            }
             set => throw VivendiException.ResourcePropertyIsReadonly();
         }
 
@@ -107,33 +121,37 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public VivendiCollection AddBereiche(string name = "Bereich", string nullInstanceName = "(Alle Bereiche)") => Add(new VivendiObjectTypeCollection
         (
-            this,
-            4,
-            name,
-            @"
-SELECT
+            parent: this,
+            type: 4,
+            name: name,
+            nullInstanceName: nullInstanceName,
+            protocolType: 0,
+            queryId: @"[dbo].[MANDANT].[Z_MA]",
+            queryWithoutSelect:
+@"
     [Z_MA] AS [ID],
     [Bezeichnung] AS [Name],
     NULL AS [Sections]
 FROM [dbo].[MANDANT]
 WHERE
-    (@ID IS NULL OR @ID = [dbo].[MANDANT].[Z_MA])
+    (@ID IS NULL OR @ID = [Z_MA])
     AND
     (@ShowAll = 1 OR [BegrenztBis] IS NULL OR [BegrenztBis] >= @Today)
-",
-            nullInstanceName
+"
         ));
 
         public VivendiCollection AddKlienten(string name = "Klient") => Add(new VivendiObjectTypeCollection
         (
-            this,
-            1,
-            name,
-            @"
-SELECT
+            parent: this,
+            type: 1,
+            name: name,
+            protocolType: 3,
+            queryId: @"[dbo].[PFLEGEBED].[Z_PF]",
+            queryWithoutSelect:
+@"
     [dbo].[PFLEGEBED].[Z_PF] AS [ID],
-    [dbo].[PERSONEN].[Name] + ', ' + [dbo].[PERSONEN].[Vorname] AS [Name],
-    STRING_AGG([dbo].[MANDANTENZUORDNUNG].[iMandant], ', ') AS [Sections]
+    ISNULL([dbo].[PERSONEN].[Name], N'') + N', ' + ISNULL([dbo].[PERSONEN].[Vorname], N'') AS [Name],
+    STRING_AGG([dbo].[MANDANTENZUORDNUNG].[iMandant], N', ') AS [Sections]
 FROM
     [dbo].[PFLEGEBED]
     JOIN
@@ -162,14 +180,16 @@ GROUP BY
 
         public VivendiCollection AddMitarbeiter(string name = "Mitarbeiter") => Add(new VivendiObjectTypeCollection
         (
-            this,
-            0,
-            name,
-            @"
-SELECT
+            parent: this,
+            type: 0,
+            name: name,
+            protocolType: 1,
+            queryId: @"[dbo].[MITARBEITER].[Z_MI]",
+            queryWithoutSelect:
+@"
     CONVERT(int, [dbo].[MITARBEITER].[Z_MI]) AS [ID],
-    [dbo].[PERSONEN].[Name] + ', ' + [dbo].[PERSONEN].[Vorname] AS [Name],
-    STRING_AGG([dbo].[MITARBEITER_BEREICH].[iMandant], ', ') AS [Sections]
+    ISNULL([dbo].[PERSONEN].[Name], N'') + N', ' + ISNULL([dbo].[PERSONEN].[Vorname], N'') AS [Name],
+    STRING_AGG([dbo].[MITARBEITER_BEREICH].[iMandant], N', ') AS [Sections]
 FROM
     [dbo].[MITARBEITER]
     JOIN
@@ -270,26 +290,6 @@ GROUP BY
 
         protected virtual IEnumerable<VivendiResource> GetChildren() => Enumerable.Empty<VivendiResource>();
 
-        private DateTime GetDate(string select)
-        {
-            // query a date over all documents with the given target table and index, if any
-            EnsureCanRead();
-            var query = new StringBuilder(@"SELECT ").Append(select).Append(@" FROM [dbo].[DATEI_ABLAGE]");
-            var parameters = new List<SqlParameter>(2);
-            if (HasObjectType)
-            {
-                query.Append(@" WHERE [ZielTabelle1] = @TargetTable");
-                parameters.Add(new SqlParameter("TargetTable", (int)ObjectType));
-                if (HasObjectInstance)
-                {
-                    query.Append(@" AND ([ZielIndex1] IS NULL AND @TargetIndex IS NULL OR [ZielIndex1] = @TargetIndex)");
-                    parameters.Add(new SqlParameter("TargetIndex", (object)ObjectID ?? DBNull.Value));
-                }
-            }
-            var lastModified = Vivendi.ExecuteScalar(VivendiSource.Store, query.ToString(), parameters.ToArray());
-            return lastModified == DBNull.Value ? DateTime.MinValue : (DateTime)lastModified;
-        }
-
         public virtual VivendiDocument NewDocument(string name, DateTime creationDate, DateTime lastModified, byte[] data) => throw VivendiException.DocumentNotAllowedInCollection();
     }
 
@@ -328,10 +328,10 @@ GROUP BY
 
     internal sealed class VivendiObjectInstanceCollection : VivendiCollection
     {
-        internal VivendiObjectInstanceCollection(VivendiCollection parent, int? id, string name, IEnumerable<int> sections)
-        : base(parent, VivendiResourceType.ObjectInstanceCollection, id ?? 0, name)
+        internal VivendiObjectInstanceCollection(VivendiCollection parent, int? id, string name, DateTime? creationDate, DateTime? lastModified, IEnumerable<int> sections)
+        : base(parent, VivendiResourceType.ObjectInstanceCollection, id ?? 0, name, creationDate, lastModified)
         {
-            SetObjectInstace(id, name);
+            SetObjectInstance(id, name);
             Sections = sections;
         }
 
@@ -343,19 +343,44 @@ GROUP BY
     internal sealed class VivendiObjectTypeCollection : VivendiCollection
     {
         private readonly VivendiObjectInstanceCollection _nullInstance;
+        private readonly int _protocolType;
         private readonly string _query;
 
-        internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string name, string query)
+        internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string name, int protocolType, string queryId, string queryWithoutSelect)
         : base(parent, VivendiResourceType.ObjectTypeCollection, type, name)
         {
-            _query = query ?? throw new ArgumentNullException(nameof(query));
+            _protocolType = protocolType;
+            var middlePart = Invariant($@" FROM [dbo].[PROTOKOLL] WHERE [ZielTabelle] = {protocolType} AND [ZielIndex] = {queryId ?? throw new ArgumentNullException(nameof(queryId))} AND [Vorgang] = ");
+            _query = Invariant($@"SELECT
+    (SELECT [Systemzeit]{middlePart}0) AS [CreationDate],
+    (SELECT MAX([Systemzeit]){middlePart}1) AS [LastModified],{queryWithoutSelect ?? throw new ArgumentNullException(nameof(queryWithoutSelect))}");
             ObjectType = type;
         }
 
-        internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string name, string query, string nullInstanceName)
-        : this(parent, type, name, query)
+        internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string name, int protocolType, string queryId, string queryWithoutSelect, string nullInstanceName)
+        : this(parent, type, name, protocolType, queryId, queryWithoutSelect)
         {
-            _nullInstance = new VivendiObjectInstanceCollection(this, null, nullInstanceName ?? throw new ArgumentNullException(nameof(nullInstanceName)), null);
+            _nullInstance = new VivendiObjectInstanceCollection(this, null, nullInstanceName ?? throw new ArgumentNullException(nameof(nullInstanceName)), null, null, null);
+        }
+
+        public override DateTime CreationDate
+        {
+            get
+            {
+                EnsureCanRead();
+                return QueryProtocol("MIN", 0) ?? base.CreationDate;
+            }
+            set => throw VivendiException.ResourcePropertyIsReadonly();
+        }
+
+        public override DateTime LastModified
+        {
+            get
+            {
+                EnsureCanRead();
+                return QueryProtocol("MAX", 1) ?? base.LastModified;
+            }
+            set => throw VivendiException.ResourcePropertyIsReadonly();
         }
 
         private IEnumerable<VivendiObjectInstanceCollection> Query(object id)
@@ -368,9 +393,17 @@ GROUP BY
                     this,
                     reader.GetInt32("ID"),
                     reader.GetString("Name"),
+                    reader.GetDateTimeOptional("CreationDate"),
+                    reader.GetDateTimeOptional("LastModified"),
                     reader.GetIDsOptional("Sections")
                 );
             }
+        }
+
+        private DateTime? QueryProtocol(string aggregate, int operation)
+        {
+            var dt = Vivendi.ExecuteScalar(VivendiSource.Data, Invariant($@"SELECT {aggregate}([Systemzeit]) FROM [dbo].[PROTOKOLL] WHERE [ZielTabelle] = {_protocolType} AND [Vorgang] = {operation}"));
+            return dt != DBNull.Value ? (DateTime?)dt : null;
         }
 
         protected override VivendiResource GetChildByID(VivendiResourceType type, int id) => type == VivendiResourceType.ObjectInstanceCollection ? id == 0 ? _nullInstance : Query(id).SingleOrDefault() : null;
@@ -398,26 +431,46 @@ GROUP BY
             using var reader = parent.Vivendi.ExecuteReader
             (
                 VivendiSource.Store,
-                    @"
+@"
+WITH [HIERARCHY]([ID], [Parent]) AS
+(
+    SELECT [Z_DAT], [Z_Parent_DAT]
+    FROM [dbo].[DATEI_ABLAGE_TYP]
+    UNION ALL
+    SELECT [dbo].[DATEI_ABLAGE_TYP].[Z_DAT], [HIERARCHY].[Parent]
+    FROM [dbo].[DATEI_ABLAGE_TYP] JOIN [HIERARCHY] ON [dbo].[DATEI_ABLAGE_TYP].[Z_Parent_DAT] = [HIERARCHY].[ID]
+)
 SELECT
     [Z_DAT] AS [ID],
     [Bezeichnung] AS [Name],
+    (
+        SELECT MAX(ISNULL([dbo].[DATEI_ABLAGE].[GeaendertDatum],[dbo].[DATEI_ABLAGE].[Dateidatum]))
+        FROM [dbo].[DATEI_ABLAGE]
+        WHERE
+            [dbo].[DATEI_ABLAGE].[ZielTabelle1] = @TargetTable AND
+            (@TargetIndex IS NULL AND [dbo].[DATEI_ABLAGE].[ZielIndex1] IS NULL OR [dbo].[DATEI_ABLAGE].[ZielIndex1] = @TargetIndex) AND
+            (
+                [dbo].[DATEI_ABLAGE].[iDokumentArt] = [dbo].[DATEI_ABLAGE_TYP].[Z_DAT] OR
+                [dbo].[DATEI_ABLAGE].[iDokumentArt] IN (SELECT [ID] FROM [HIERARCHY] WHERE [HIERARCHY].[Parent] = [dbo].[DATEI_ABLAGE_TYP].[Z_DAT])
+            )
+    ) AS [LastModified],
+    [Bereiche] AS [Sections],
     [lMaxSize] * 1024 AS [MaxDocumentSize],
     [lRechteLevel] AS [AccessLevel],
-    [Bereiche] AS [Sections],
     CASE WHEN [SperrfristActive] = 1 THEN [Sperrfrist] ELSE NULL END AS [LockAfterMonths]
 FROM [dbo].[DATEI_ABLAGE_TYP]
 WHERE
     (@ID IS NULL OR [Z_DAT] = @ID) AND                                           -- query all or just a single collection
     ([Z_Parent_DAT] IS NULL AND @Parent IS NULL OR [Z_Parent_DAT] = @Parent) AND -- query the root or sub collections
     [Zielanwendung] = 0 AND                                                      -- Vivendi NG
-    ([ZielTabelle] IS NULL OR [ZielTabelle] = @ObjectType) AND                   -- query the proper type
+    ([ZielTabelle] IS NULL OR [ZielTabelle] = @TargetTable) AND                   -- query the proper type
     [SeriendruckVorlage] IS NULL AND                                             -- no reports
     [bZippen] = 0 AND                                                            -- no zipped collections (because not reproducable in Vivendi)
     [DmsSuchkontext] IS NULL                                                     -- no external archives
 ",
                 new SqlParameter("ID", id),
-                new SqlParameter("ObjectType", parent.ObjectType),
+                new SqlParameter("TargetTable", parent.ObjectType),
+                new SqlParameter("TargetIndex", (object)parent.ObjectID ?? DBNull.Value),
                 new SqlParameter("Parent", parent is VivendiStoreCollection ? (object)parent.ID : DBNull.Value)
             );
             while (reader.Read())
@@ -427,9 +480,10 @@ WHERE
                     parent,
                     reader.GetInt32("ID"),
                     reader.GetString("Name"),
+                    reader.GetDateTimeOptional("LastModified"),
+                    reader.GetIDsOptional("Sections"),
                     reader.GetInt32Optional("MaxDocumentSize"),
                     reader.GetInt32Optional("AccessLevel") ?? 0,
-                    reader.GetIDsOptional("Sections"),
                     reader.GetInt32Optional("LockAfterMonths")
                 );
             }
@@ -439,12 +493,12 @@ WHERE
 
         internal static VivendiStoreCollection QueryOne(VivendiCollection parent, int id) => Query(parent, id).SingleOrDefault();
 
-        private VivendiStoreCollection(VivendiCollection parent, int id, string name, int? maxDocumentSize, int accessLevel, IEnumerable<int> sections, int? lockAfterMonths)
-        : base(parent, VivendiResourceType.StoreCollection, id, name)
+        private VivendiStoreCollection(VivendiCollection parent, int id, string name, DateTime? lastModified, IEnumerable<int> sections, int? maxDocumentSize, int accessLevel, int? lockAfterMonths)
+        : base(parent, VivendiResourceType.StoreCollection, id, name, lastModified: lastModified)
         {
+            Sections = sections;
             MaxDocumentSize = maxDocumentSize == 0 ? null : maxDocumentSize;
             RequiredAccessLevel = accessLevel;
-            Sections = sections;
             LockAfterMonths = lockAfterMonths;
         }
 

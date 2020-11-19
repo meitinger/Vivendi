@@ -55,7 +55,7 @@ namespace Aufbauwerk.Tools.Vivendi
         { }
 
         private Vivendi(VivendiCollection parent, VivendiResourceType type, string name, string userName, SecurityIdentifier userSid, IDictionary<VivendiSource, string> connectionStrings)
-        : base(parent, type, 0, name)
+        : base(parent, type, 0, name, creationDate: DateTime.Now)
         {
             // set all properties
             UserName = userName ?? throw new ArgumentNullException(nameof(userName));
@@ -70,13 +70,23 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public Func<VivendiResource, SecurityIdentifier, bool> AllowModificationOfOwnedResource { internal get; set; }
 
+        public override DateTime LastModified
+        {
+            get
+            {
+                EnsureCanRead();
+                return DateTime.Now;
+            }
+            set => VivendiException.ResourcePropertyIsReadonly();
+        }
+
         public string UserName { get; }
 
         public SecurityIdentifier UserSid { get; }
 
         private void AddAccessLevel(IDictionary<int, short> map, short accessLevel, ref short maxAccessLevel, int section)
         {
-            // determine and set the maximum access level for the given section and globaly
+            // determine and set the maximum access level for the given section and globally
             if (!map.TryGetValue(section, out var maxAccessLevelForSection) || accessLevel > maxAccessLevelForSection)
             {
                 map[section] = accessLevel;
@@ -161,7 +171,7 @@ namespace Aufbauwerk.Tools.Vivendi
             using var reader = ExecuteReader
             (
                 VivendiSource.Data,
-                    @"
+@"
 WITH [HIERARCHY]([ID], [Parent]) AS
 (
     SELECT [Z_MA], [Z_Parent_MA]
@@ -198,7 +208,7 @@ WHERE
                 new SqlParameter("Today", DateTime.Today)
             );
 
-            // build a map with all sections containg children
+            // build a map with all sections containing children
             var sectionChildren = new Dictionary<int, IEnumerable<int>>();
             while (reader.Read())
             {

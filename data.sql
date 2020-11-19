@@ -8,3 +8,11 @@ GRANT SELECT ON [dbo].[MITARBEITER] TO [WebDAV]
 GRANT SELECT ON [dbo].[MITARBEITER_BEREICH] TO [WebDAV]
 GRANT SELECT ON [dbo].[PERSONEN] TO [WebDAV]
 GRANT SELECT ON [dbo].[PFLEGEBED] TO [WebDAV]
+GRANT SELECT ON [dbo].[PROTOKOLL] TO [WebDAV]
+CREATE NONCLUSTERED INDEX [webdav_protokoll_index] ON [dbo].[PROTOKOLL]
+(
+	[Vorgang] ASC,
+	[ZielTabelle] ASC,
+	[ZielIndex] ASC,
+	[Systemzeit] ASC
+)

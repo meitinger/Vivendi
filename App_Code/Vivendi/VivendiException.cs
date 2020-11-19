@@ -33,7 +33,7 @@ namespace Aufbauwerk.Tools.Vivendi
         internal static VivendiException DocumentContainsAdditionalLinks() => new VivendiException("The document contains additional links and should therefore only be modified within Vivendi.");
         internal static VivendiException DocumentHasDifferentOwner() => new VivendiException("The document was uploaded by a different user.");
         internal static VivendiException DocumentIsLocked(DateTime lockDate) => new VivendiException(ERROR_LOCK_VIOLATION, $"The document has been locked since {lockDate}.");
-        internal static VivendiException DocumentIsNotWebDAV() => new VivendiException("The document was created or modified in Vivendi and therefore cannot be modified outsite.");
+        internal static VivendiException DocumentIsNotWebDAV() => new VivendiException("The document was created or modified in Vivendi and therefore cannot be modified outside.");
         internal static VivendiException DocumentIsTooLarge(int maxSize) => new VivendiException(ERROR_FILE_TOO_LARGE, $"The document exceeds the size of {maxSize} bytes.");
         internal static VivendiException DocumentNotAllowedInCollection() => new VivendiException(ERROR_NOT_SUPPORTED, "Documents cannot be created in or copied/moved to this collection.");
         internal static VivendiException ResourceIsStatic() => new VivendiException("The resource is static and cannot be altered.");
@@ -41,7 +41,7 @@ namespace Aufbauwerk.Tools.Vivendi
         internal static VivendiException ResourceNameIsInvalid() => new VivendiException(ERROR_BAD_PATHNAME, "The name of the resource is invalid.");
         internal static VivendiException ResourceNotInGrantedSections() => new VivendiException("Access denied.");
         internal static VivendiException ResourcePropertyIsReadonly([CallerMemberName] string propertyName = "") => new VivendiException($"The property {propertyName} is read-only.");
-        internal static VivendiException ResourceRequiresHigherAccessLevel() => new VivendiException("Insufficent access level.");
+        internal static VivendiException ResourceRequiresHigherAccessLevel() => new VivendiException("Insufficient access level.");
 
         private VivendiException(string message)
         : this(ERROR_ACCESS_DENIED, message)

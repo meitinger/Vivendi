@@ -23,13 +23,6 @@ using System.Linq;
 
 public static class VivendiSqlExtensions
 {
-    private static T? GetOptional<T>(Func<int, T> readerAccessor, string column) where T : struct
-    {
-        var reader = (SqlDataReader)readerAccessor.Target;
-        var i = reader.GetOrdinal(column);
-        return reader.IsDBNull(i) ? (T?)null : readerAccessor(i);
-    }
-
     public static bool GetBoolean(this SqlDataReader reader, string column) => reader.GetBoolean(reader.GetOrdinal(column));
 
     public static bool? GetBooleanOptional(this SqlDataReader reader, string column) => GetOptional(reader.GetBoolean, column);
@@ -49,6 +42,13 @@ public static class VivendiSqlExtensions
     public static int GetInt32(this SqlDataReader reader, string column) => reader.GetInt32(reader.GetOrdinal(column));
 
     public static int? GetInt32Optional(this SqlDataReader reader, string column) => GetOptional(reader.GetInt32, column);
+
+    private static T? GetOptional<T>(Func<int, T> readerAccessor, string column) where T : struct
+    {
+        var reader = (SqlDataReader)readerAccessor.Target;
+        var i = reader.GetOrdinal(column);
+        return reader.IsDBNull(i) ? (T?)null : readerAccessor(i);
+    }
 
     public static string GetString(this SqlDataReader reader, string column) => reader.GetString(reader.GetOrdinal(column));
 

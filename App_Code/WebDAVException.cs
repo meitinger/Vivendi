@@ -36,6 +36,14 @@ public sealed class WebDAVException : Exception
 
     public static WebDAVException FromVivendiException(VivendiException e) => new WebDAVException(e.ErrorCode == ERROR_FILE_TOO_LARGE ? (HttpStatusCode)507 : HttpStatusCode.Forbidden, e.ErrorCode, e.Message);
 
+    private static WebDAVException PropertyInvalid(string message) => new WebDAVException(HttpStatusCode.Conflict, ERROR_INVALID_PARAMETER, message);
+    internal static WebDAVException PropertyInvalidHexNumber() => PropertyInvalid($"Not a valid hexadecimal number.");
+    internal static WebDAVException PropertyInvalidRountripTime() => PropertyInvalid($"Not a valid roundtrip time.");
+    internal static WebDAVException PropertyInvalidTimestamp() => PropertyInvalid($"Not a valid timestamp value.");
+    internal static WebDAVException PropertyIsProtected() => new WebDAVException(HttpStatusCode.Forbidden, ERROR_WRITE_PROTECT, "Cannot change a protected property.", "cannot-modify-protected-property");
+    internal static WebDAVException PropertyNotFound() => new WebDAVException(HttpStatusCode.NotFound, ERROR_NOT_FOUND, "No property with this name exists.");
+    internal static WebDAVException PropertyNotRemovable() => new WebDAVException(HttpStatusCode.NotImplemented, ERROR_NOT_SUPPORTED, "Removal of property is not supported.");
+    internal static WebDAVException PropertyOperationSuccessful() => new WebDAVException(HttpStatusCode.OK, ERROR_SUCCESS, null);
     internal static WebDAVException RequestDifferentStore(Uri uri) => new WebDAVException(HttpStatusCode.BadRequest, ERROR_NOT_SAME_DEVICE, $"The URI '{uri}' refers to a different Vivendi store.");
     internal static WebDAVException RequestHeaderInifiniteDepthNotSupported() => new WebDAVException(HttpStatusCode.Forbidden, ERROR_NOT_SUPPORTED, "Infinite depth requests are not supported.", "propfind-finite-depth");
     private static WebDAVException RequestHeaderInvalid(string message) => new WebDAVException(HttpStatusCode.BadRequest, ERROR_BAD_ARGUMENTS, message);
@@ -48,14 +56,6 @@ public sealed class WebDAVException : Exception
     internal static WebDAVException RequestXmlInvalidPropfindElement() => RequestXmlInvalid("The propfind node must contain exactly one of allprop, propname or prop element.");
     internal static WebDAVException RequestXmlInvalidRootElement(string expectedName) => RequestXmlInvalid($"Root node must be {expectedName} element.");
     internal static WebDAVException RequestXmlInvalidSetOrRemoveElement() => RequestXmlInvalid("The set and remove nodes must contain exactly one prop element.");
-    private static WebDAVException PropertyInvalid(string message) => new WebDAVException(HttpStatusCode.Conflict, ERROR_INVALID_PARAMETER, message);
-    internal static WebDAVException PropertyInvalidHexNumber() => PropertyInvalid($"Not a valid hexadecimal number.");
-    internal static WebDAVException PropertyInvalidRountripTime() => PropertyInvalid($"Not a valid roundtrip time.");
-    internal static WebDAVException PropertyInvalidTimestamp() => PropertyInvalid($"Not a valid timestamp value.");
-    internal static WebDAVException PropertyIsProtected() => new WebDAVException(HttpStatusCode.Forbidden, ERROR_WRITE_PROTECT, "Cannot change a protected property.", "cannot-modify-protected-property");
-    internal static WebDAVException PropertyNotFound() => new WebDAVException(HttpStatusCode.NotFound, ERROR_NOT_FOUND, "No property with this name exists.");
-    internal static WebDAVException PropertyNotRemovable() => new WebDAVException(HttpStatusCode.NotImplemented, ERROR_NOT_SUPPORTED, "Removal of property is not supported.");
-    internal static WebDAVException PropertyOperationSuccessful() => new WebDAVException(HttpStatusCode.OK, ERROR_SUCCESS, null);
     internal static WebDAVException ResourceAlreadyExists() => new WebDAVException(HttpStatusCode.PreconditionFailed, ERROR_FILE_EXISTS, "Resource is already present but overwrite header is not set.");
     internal static WebDAVException ResourceCollectionsImmutable() => new WebDAVException(HttpStatusCode.Forbidden, ERROR_NOT_SUPPORTED, "Only documents can be moved, copied, deleted, uploaded or replaced.");
     internal static WebDAVException ResourceIsIdentical() => new WebDAVException(HttpStatusCode.Forbidden, ERROR_SHARING_VIOLATION, "Source and destination are the same resource.");
