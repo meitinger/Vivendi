@@ -396,9 +396,9 @@ public sealed class WebDAVGetHandler : WebDAVGetAndHeadHandler
                 .Append(@"<a href=""")
                 .Append(context.GetRelativeHref(res))
                 .Append(@""" title=""Creation Date: ")
-                .Append(collection.CreationDate)
+                .Append(res.CreationDate)
                 .Append(@"&#13;Last Modified: ")
-                .Append(collection.LastModified)
+                .Append(res.LastModified)
                 .Append(@""">")
                 .Append(HttpUtility.HtmlEncode(res.DisplayName))
                 .Append(@"</a><br/>");
