@@ -99,9 +99,9 @@ namespace Aufbauwerk.Tools.Vivendi
     {
         private const string WEBDAV_PREFIX = "webdav:v1:";
 
-        private class Template
+        private struct Template
         {
-            public Template(VivendiStoreCollection parent, int id, bool additionalTargets, int? section, SecurityIdentifier owner, string displayName, DateTime creationDate, DateTime lastModified, int size, DateTime? lockDate)
+            public Template(VivendiStoreCollection parent, int id, bool additionalTargets, int? section, SecurityIdentifier owner, string displayName, DateTime creationDate, DateTime lastModified, int size, DateTime? lockDate, bool signed)
             {
                 // initialize the template
                 Parent = parent;
@@ -114,6 +114,7 @@ namespace Aufbauwerk.Tools.Vivendi
                 LastModified = lastModified;
                 Size = size;
                 LockDate = lockDate;
+                Signed = signed;
             }
 
             public readonly VivendiStoreCollection Parent;
@@ -126,6 +127,7 @@ namespace Aufbauwerk.Tools.Vivendi
             public readonly DateTime LastModified;
             public readonly int Size;
             public readonly DateTime? LockDate;
+            public readonly bool Signed;
         }
 
         internal static VivendiStoreDocument Create(VivendiStoreCollection parent, string name, DateTime creationDate, DateTime lastModified, byte[] data)
@@ -160,6 +162,8 @@ INSERT INTO [dbo].[DATEI_ABLAGE]
     [iDokumentArt],
     [ZielIndex1],
     [ZielTabelle1],
+    [ZielTabelle2],
+    [ZielTabelle3],
     [Speicherort],
     [Dateiname],
     [ZielBeschreibung],
@@ -169,7 +173,9 @@ INSERT INTO [dbo].[DATEI_ABLAGE]
     [GeaendertDatum],
     [BelegDatum],
     [pDateiBlob],
-    [Sperrdatum]
+    [Sperrdatum],
+    [bUnterschrieben],
+    [CloudTyp]
 )
 VALUES
 (
@@ -177,6 +183,8 @@ VALUES
     @Parent,
     @TargetIndex,
     @TargetTable,
+    -2,
+    -2,
     @Location,
     @Name,
     @TargetDescription,
@@ -186,7 +194,9 @@ VALUES
     CASE WHEN @CreationDate = @LastModified THEN NULL ELSE @LastModified END,
     CAST(@CreationDate AS date),
     @Blob,
-    @LockDate
+    @LockDate,
+    0,
+    -2
 )
 ",
                 id,
@@ -331,14 +341,15 @@ VALUES
 @"
 SELECT
     [Z_DA] AS [ID],
-    CONVERT(bit, CASE WHEN [ZielTabelle2] IS NOT NULL OR [ZielTabelle3] IS NOT NULL THEN 1 ELSE 0 END) AS [AdditionalTargets],
-    [ZielTabelle3] AS [Section],
+    CONVERT(bit, CASE WHEN [ZielTabelle2] = -2 AND [ZielTabelle3] = -2 THEN 0 ELSE 1 END) AS [AdditionalTargets],
+    CASE WHEN [ZielTabelle3] = -2 THEN NULL ELSE [ZielTabelle3] END AS [Section],
     [Speicherort] AS [Location],
     [Dateiname] AS [DisplayName],
     [Dateidatum] AS [CreationDate],
     ISNULL([GeaendertDatum], [Dateidatum]) AS [LastModified],
     DATALENGTH(pDateiBlob) AS [Size],
-    [Sperrdatum] AS [LockDate]
+    [Sperrdatum] AS [LockDate],
+    CONVERT(bit, [bUnterschrieben]) AS [Signed]
 FROM [dbo].[DATEI_ABLAGE]
 WHERE
     (@ID IS NULL OR [Z_DA] = @ID) AND                                                  -- match the ID if one is given
@@ -346,7 +357,8 @@ WHERE
     [iSeriendruck] IS NULL AND                                                         -- no reports
     ([ZielIndex1] IS NULL AND @TargetIndex IS NULL OR [ZielIndex1] = @TargetIndex) AND -- query for a object instance
     [ZielTabelle1] = @TargetTable AND                                                  -- query for a object type
-    [bGeZippt] = 0                                                                     -- no zipped docs (because not reproducable in Vivendi)
+    [bGeZippt] = 0 AND                                                                 -- no zipped docs (because not reproducable in Vivendi)
+    [CloudTyp] = -2                                                                    -- no cloud documents (also not found in UI)
 ",
                 new SqlParameter("ID", id),
                 new SqlParameter("Parent", parent.ID),
@@ -366,7 +378,8 @@ WHERE
                     reader.GetDateTime("CreationDate"),
                     reader.GetDateTime("LastModified"),
                     reader.GetInt32("Size"),
-                    reader.GetDateTimeOptional("LockDate")
+                    reader.GetDateTimeOptional("LockDate"),
+                    reader.GetBoolean("Signed") 
                 );
             }
         }
@@ -411,6 +424,7 @@ WHERE
         private readonly DateTime? _lockDate;
         private readonly SecurityIdentifier _owner;
         private readonly VivendiStoreCollection _parent;
+        private readonly bool _signed;
         private int _size;
 
         private VivendiStoreDocument(bool isNamed, Template template)
@@ -429,7 +443,7 @@ WHERE
             _data = null;
             _size = template.Size;
             _lockDate = template.LockDate;
-
+            _signed = template.Signed;
         }
 
         private VivendiStoreDocument(VivendiStoreCollection parent, int id, SecurityIdentifier owner, string displayName, DateTime creationDate, DateTime lastModified, byte[] data, DateTime? lockDate)
@@ -627,6 +641,12 @@ WHERE [Z_DA] = @ID
             if (_lockDate.HasValue && DateTime.Now >= _lockDate.Value)
             {
                 return dontThrow ? false : throw VivendiException.DocumentIsLocked(_lockDate.Value);
+            }
+
+            // check if signed
+            if (_signed)
+            {
+                return dontThrow ? false : throw VivendiException.DocumentIsSigned();
             }
 
             // check if the file was uploaded by WebDAV

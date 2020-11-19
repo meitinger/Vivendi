@@ -463,7 +463,7 @@ WHERE
     (@ID IS NULL OR [Z_DAT] = @ID) AND                                           -- query all or just a single collection
     ([Z_Parent_DAT] IS NULL AND @Parent IS NULL OR [Z_Parent_DAT] = @Parent) AND -- query the root or sub collections
     [Zielanwendung] = 0 AND                                                      -- Vivendi NG
-    ([ZielTabelle] IS NULL OR [ZielTabelle] = @TargetTable) AND                   -- query the proper type
+    ([ZielTabelle] = -2 OR [ZielTabelle] = @TargetTable) AND                     -- query the proper type
     [SeriendruckVorlage] IS NULL AND                                             -- no reports
     [bZippen] = 0 AND                                                            -- no zipped collections (because not reproducable in Vivendi)
     [DmsSuchkontext] IS NULL                                                     -- no external archives

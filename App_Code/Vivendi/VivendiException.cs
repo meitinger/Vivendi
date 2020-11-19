@@ -34,6 +34,7 @@ namespace Aufbauwerk.Tools.Vivendi
         internal static VivendiException DocumentHasDifferentOwner() => new VivendiException("The document was uploaded by a different user.");
         internal static VivendiException DocumentIsLocked(DateTime lockDate) => new VivendiException(ERROR_LOCK_VIOLATION, $"The document has been locked since {lockDate}.");
         internal static VivendiException DocumentIsNotWebDAV() => new VivendiException("The document was created or modified in Vivendi and therefore cannot be modified outside.");
+        internal static VivendiException DocumentIsSigned() => new VivendiException("The document was signed and cannot be modified.");
         internal static VivendiException DocumentIsTooLarge(int maxSize) => new VivendiException(ERROR_FILE_TOO_LARGE, $"The document exceeds the size of {maxSize} bytes.");
         internal static VivendiException DocumentNotAllowedInCollection() => new VivendiException(ERROR_NOT_SUPPORTED, "Documents cannot be created in or copied/moved to this collection.");
         internal static VivendiException ResourceIsStatic() => new VivendiException("The resource is static and cannot be altered.");
