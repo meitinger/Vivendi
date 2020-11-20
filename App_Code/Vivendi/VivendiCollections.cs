@@ -124,14 +124,15 @@ namespace Aufbauwerk.Tools.Vivendi
             parent: this,
             type: 4,
             name: name,
-            nullInstanceName: nullInstanceName,
+            nullInstanceName: nullInstanceName ?? throw new ArgumentNullException(nameof(nullInstanceName)),
+            allowInheritedAccess: true,
             protocolType: 0,
             queryId: @"[dbo].[MANDANT].[Z_MA]",
             queryWithoutSelect:
 @"
     [Z_MA] AS [ID],
     [Bezeichnung] AS [Name],
-    NULL AS [Sections]
+    STR([Z_MA]) AS [Sections]
 FROM [dbo].[MANDANT]
 WHERE
     (@ID IS NULL OR @ID = [Z_MA])
@@ -183,6 +184,7 @@ GROUP BY
             parent: this,
             type: 0,
             name: name,
+            allowInheritedAccess: true,
             protocolType: 1,
             queryId: @"[dbo].[MITARBEITER].[Z_MI]",
             queryWithoutSelect:
@@ -342,25 +344,25 @@ GROUP BY
 
     internal sealed class VivendiObjectTypeCollection : VivendiCollection
     {
+        private readonly bool _allowInheritedAccess;
         private readonly VivendiObjectInstanceCollection _nullInstance;
         private readonly int _protocolType;
         private readonly string _query;
 
-        internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string name, int protocolType, string queryId, string queryWithoutSelect)
+        internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string name, int protocolType, string queryId, string queryWithoutSelect, bool allowInheritedAccess = true, string nullInstanceName = null)
         : base(parent, VivendiResourceType.ObjectTypeCollection, type, name)
         {
+            ObjectType = type;
+            _allowInheritedAccess = allowInheritedAccess;
             _protocolType = protocolType;
+            if (nullInstanceName != null)
+            {
+                _nullInstance = new VivendiObjectInstanceCollection(this, null, nullInstanceName, null, null, null);
+            }
             var middlePart = Invariant($@" FROM [dbo].[PROTOKOLL] WHERE [ZielTabelle] = {protocolType} AND [ZielIndex] = {queryId ?? throw new ArgumentNullException(nameof(queryId))} AND [Vorgang] = ");
             _query = Invariant($@"SELECT
     (SELECT [Systemzeit]{middlePart}0) AS [CreationDate],
     (SELECT MAX([Systemzeit]){middlePart}1) AS [LastModified],{queryWithoutSelect ?? throw new ArgumentNullException(nameof(queryWithoutSelect))}");
-            ObjectType = type;
-        }
-
-        internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string name, int protocolType, string queryId, string queryWithoutSelect, string nullInstanceName)
-        : this(parent, type, name, protocolType, queryId, queryWithoutSelect)
-        {
-            _nullInstance = new VivendiObjectInstanceCollection(this, null, nullInstanceName ?? throw new ArgumentNullException(nameof(nullInstanceName)), null, null, null);
         }
 
         public override DateTime CreationDate
@@ -388,6 +390,11 @@ GROUP BY
             using var reader = Vivendi.ExecuteReader(VivendiSource.Data, _query, new SqlParameter("ID", id), new SqlParameter("ShowAll", ShowAll), new SqlParameter("Today", DateTime.Today));
             while (reader.Read())
             {
+                var sections = reader.GetIDs("Sections");
+                if (_allowInheritedAccess)
+                {
+                    sections = sections.Concat(sections.SelectMany(section => Vivendi.GetAllSubSections(section)));
+                }
                 yield return new VivendiObjectInstanceCollection
                 (
                     this,
@@ -395,7 +402,7 @@ GROUP BY
                     reader.GetString("Name"),
                     reader.GetDateTimeOptional("CreationDate"),
                     reader.GetDateTimeOptional("LastModified"),
-                    reader.GetIDsOptional("Sections")
+                    sections
                 );
             }
         }

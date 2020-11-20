@@ -63,7 +63,7 @@ namespace Aufbauwerk.Tools.Vivendi
         private int? _objectID;
         private string _objectName;
         private int? _objectType;
-        private IEnumerable<int> _sections;
+        private ISet<int> _sections;
 
         internal VivendiResource(VivendiCollection parent, VivendiResourceType type, int id, string name)
         {
@@ -128,9 +128,9 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public abstract string DisplayName { get; set; }
 
-        internal bool HasObjectInstance => SelfAndAncestorsWithSameObjectType.Any(r => r._hasObjectInstance);
+        protected internal bool HasObjectInstance => SelfAndAncestorsWithSameObjectType.Any(r => r._hasObjectInstance);
 
-        internal bool HasObjectType => SelfAndAncestors.Any(r => r._objectType.HasValue);
+        protected internal bool HasObjectType => SelfAndAncestors.Any(r => r._objectType.HasValue);
 
         internal int ID { get; }
 
@@ -142,11 +142,11 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public string Name { get; }
 
-        internal int? ObjectID => ObjectInstanceResource._objectID;
+        protected internal int? ObjectID => ObjectInstanceResource._objectID;
 
         private VivendiResource ObjectInstanceResource => SelfAndAncestorsWithSameObjectType.FirstOrDefault(r => r._hasObjectInstance) ?? throw new InvalidOperationException("Object instance has not been set.");
 
-        internal string ObjectName => ObjectInstanceResource._objectName;
+        protected internal string ObjectName => ObjectInstanceResource._objectName;
 
         protected internal int ObjectType
         {
@@ -158,12 +158,12 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public VivendiCollection Parent { get; }
 
-        protected internal int RequiredAccessLevel { get; protected set; }
+        protected int RequiredAccessLevel { get; set; }
 
-        protected internal IEnumerable<int> Sections
+        protected IEnumerable<int> Sections
         {
             get => _sections;
-            protected set => _sections = value?.ToHashSet();
+            set => _sections = value?.ToHashSet();
         }
 
         internal IEnumerable<VivendiResource> SelfAndAncestors => WalkParentTree(r => r.Type == VivendiResourceType.Root);

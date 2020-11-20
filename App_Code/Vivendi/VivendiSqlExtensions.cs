@@ -33,7 +33,7 @@ public static class VivendiSqlExtensions
 
     public static IEnumerable<int> GetIDs(this SqlDataReader reader, string column) => GetIDsOptional(reader, column) ?? throw new SqlNullValueException();
 
-    public static IEnumerable<int> GetIDsOptional(this SqlDataReader reader, string column) => GetStringOptional(reader, column)?.Split(',').Select(s => int.Parse(s, NumberStyles.AllowLeadingWhite | NumberStyles.AllowTrailingWhite, CultureInfo.InvariantCulture));
+    public static IEnumerable<int> GetIDsOptional(this SqlDataReader reader, string column) => GetStringOptional(reader, column)?.Split(',').Select(s => int.Parse(s, CultureInfo.InvariantCulture));
 
     public static short GetInt16(this SqlDataReader reader, string column) => reader.GetInt16(reader.GetOrdinal(column));
 
