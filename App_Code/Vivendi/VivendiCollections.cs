@@ -278,12 +278,7 @@ GROUP BY
             }
 
             // ensure the resource is in the collection and has the same extension
-            return
-                resource != null &&
-                resource.InCollection &&
-                string.Equals(name, resource.Name, Vivendi.PathComparison)
-                ? resource
-                : null;
+            return resource != null && resource.InCollection && string.Equals(name, resource.Name, Vivendi.PathComparison) ? resource : null;
         }
 
         protected virtual VivendiResource GetChildByName(string name) => null;
@@ -393,7 +388,7 @@ GROUP BY
                 var sections = reader.GetIDs("Sections");
                 if (_allowInheritedAccess)
                 {
-                    sections = sections.Concat(sections.SelectMany(section => Vivendi.GetAllSubSections(section)));
+                    sections = sections.SelectMany(section => Vivendi.ExpandSection(section));
                 }
                 yield return new VivendiObjectInstanceCollection
                 (
@@ -503,7 +498,22 @@ WHERE
         private VivendiStoreCollection(VivendiCollection parent, int id, string name, DateTime? lastModified, IEnumerable<int> sections, int? maxDocumentSize, int accessLevel, int? lockAfterMonths)
         : base(parent, VivendiResourceType.StoreCollection, id, name, lastModified: lastModified)
         {
-            Sections = sections;
+            if (sections != null)
+            {
+                var result = new HashSet<int>();
+                foreach (var section in sections)
+                {
+                    if (section < 0)
+                    {
+                        result.ExceptWith(Vivendi.ExpandSection(-section));
+                    }
+                    else
+                    {
+                        result.UnionWith(Vivendi.ExpandSection(section));
+                    }
+                }
+                Sections = result;
+            }
             MaxDocumentSize = maxDocumentSize == 0 ? null : maxDocumentSize;
             RequiredAccessLevel = accessLevel;
             LockAfterMonths = lockAfterMonths;

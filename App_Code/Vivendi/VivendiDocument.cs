@@ -379,7 +379,7 @@ WHERE
                     reader.GetDateTime("LastModified"),
                     reader.GetInt32("Size"),
                     reader.GetDateTimeOptional("LockDate"),
-                    reader.GetBoolean("Signed") 
+                    reader.GetBoolean("Signed")
                 );
             }
         }

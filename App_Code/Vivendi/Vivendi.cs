@@ -89,7 +89,7 @@ namespace Aufbauwerk.Tools.Vivendi
         private void AddAccessLevel(IDictionary<int, short> map, short accessLevel, ref short maxAccessLevel, int section)
         {
             // determine and set the maximum access level for the given section and globally
-            foreach (var sectionOrSubSection in GetAllSubSections(section).Prepend(section))
+            foreach (var sectionOrSubSection in ExpandSection(section))
             {
                 if (!map.TryGetValue(sectionOrSubSection, out var maxAccessLevelForSection) || accessLevel > maxAccessLevelForSection)
                 {
@@ -111,8 +111,7 @@ namespace Aufbauwerk.Tools.Vivendi
             }
 
             // add the section and all its children
-            sections.Add(section);
-            sections.UnionWith(GetAllSubSections(section));
+            sections.UnionWith(ExpandSection(section));
         }
 
         private SqlCommand BuildCommand(SqlConnection connection, string commandText, SqlParameter[] parameters)
@@ -146,13 +145,15 @@ namespace Aufbauwerk.Tools.Vivendi
             return BuildCommand(connection, commandText, parameters).ExecuteScalar();
         }
 
-        internal IEnumerable<int> GetAllSubSections(int section) => _sectionMap.TryGetValue(section, out var subSections) ? subSections : Enumerable.Empty<int>();
+        internal IEnumerable<int> ExpandSection(int section) => (_sectionMap.TryGetValue(section, out var subSections) ? subSections : Enumerable.Empty<int>()).Prepend(section);
 
-        internal int GetReadAccessLevel(IEnumerable<int> sections) => sections == null ? _maxReadAccessLevel : sections.Max(s => _readAccessLevels.TryGetValue(s, out var level) ? level : 0);
+        private int GetAccessLevel(IEnumerable<int> sections, int maxAccessLevel, IDictionary<int, short> accessLevels) => sections == null ? maxAccessLevel : !sections.Any() ? 0 : sections.Max(s => accessLevels.TryGetValue(s, out var level) ? level : 0);
+
+        internal int GetReadAccessLevel(IEnumerable<int> sections) => GetAccessLevel(sections, _maxReadAccessLevel, _readAccessLevels);
 
         internal IEnumerable<int> GetReadableSections(int objectType) => _readableSectionsByObjectType.TryGetValue(objectType, out var sections) ? sections : Enumerable.Empty<int>();
 
-        internal int GetWriteAccessLevel(IEnumerable<int> sections) => sections == null ? _maxWriteAccessLevel : sections.Max(s => _writeAccessLevels.TryGetValue(s, out var level) ? level : 0);
+        internal int GetWriteAccessLevel(IEnumerable<int> sections) => GetAccessLevel(sections, _maxWriteAccessLevel, _writeAccessLevels);
 
         internal IEnumerable<int> GetWritableSections(int objectType) => _writableSectionsByObjectType.TryGetValue(objectType, out var sections) ? sections : Enumerable.Empty<int>();
 
