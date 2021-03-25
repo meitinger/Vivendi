@@ -175,7 +175,8 @@ INSERT INTO [dbo].[DATEI_ABLAGE]
     [pDateiBlob],
     [Sperrdatum],
     [bUnterschrieben],
-    [CloudTyp]
+    [CloudTyp],
+    [bImportiert]
 )
 VALUES
 (
@@ -196,7 +197,8 @@ VALUES
     @Blob,
     @LockDate,
     0,
-    -2
+    -2,
+    0
 )
 ",
                 id,
