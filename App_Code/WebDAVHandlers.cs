@@ -265,7 +265,7 @@ public abstract class WebDAVPropHandler : WebDAVHandler
 
     protected HttpStatusCode ProcessRequestInternal(HttpContext context, IEnumerable<VivendiResource> resources, IEnumerable<PropertyName> propertyNames, Action<Property, VivendiResource, XmlElement> action)
     {
-        // create the mulistatus response and handle each resource
+        // create the multi-status response and handle each resource
         var doc = new XmlDocument();
         var multistatusElement = doc.AppendChild(doc.CreateElement("multistatus", DAV));
         foreach (var resource in resources)
@@ -375,7 +375,7 @@ public sealed class WebDAVGetHandler : WebDAVGetAndHeadHandler
 
     private void WriteCollection(HttpContext context, VivendiCollection collection)
     {
-        // build the response html
+        // build the response HTML
         var response = new StringBuilder();
         response.AppendLine(@"<!DOCTYPE html>");
         response.Append(@"<html><head><meta charset=""utf-8""/><title>/");
@@ -578,7 +578,7 @@ public sealed class WebDAVPutHandler : WebDAVHandler
 {
     protected override HttpStatusCode ProcessRequestInternal(HttpContext context)
     {
-        // check if a document under the current uri already exists
+        // check if a document under the current URI already exists
         var doc = context.TryGetDocument(out var collection, out var name);
         if (doc != null)
         {
@@ -616,8 +616,5 @@ public sealed class WebDAVPutHandler : WebDAVHandler
 public sealed class WebDAVUnsupportedHandler : WebDAVHandler
 {
     // we don't implement locking
-    protected override HttpStatusCode ProcessRequestInternal(HttpContext context)
-    {
-        return HttpStatusCode.NotImplemented;
-    }
+    protected override HttpStatusCode ProcessRequestInternal(HttpContext context) => HttpStatusCode.NotImplemented;
 }

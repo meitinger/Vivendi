@@ -325,7 +325,7 @@ VALUES
 
         private static SecurityIdentifier ParseOwner(string location)
         {
-            // check the prefix and parse the sid
+            // check the prefix and parse the SID
             if (!location.StartsWith(WEBDAV_PREFIX, StringComparison.OrdinalIgnoreCase))
             {
                 return null;
@@ -359,7 +359,7 @@ WHERE
     [iSeriendruck] IS NULL AND                                                         -- no reports
     ([ZielIndex1] IS NULL AND @TargetIndex IS NULL OR [ZielIndex1] = @TargetIndex) AND -- query for a object instance
     [ZielTabelle1] = @TargetTable AND                                                  -- query for a object type
-    [bGeZippt] = 0 AND                                                                 -- no zipped docs (because not reproducable in Vivendi)
+    [bGeZippt] = 0 AND                                                                 -- no zipped docs (because not reproducible in Vivendi)
     [CloudTyp] = -2                                                                    -- no cloud documents (also not found in UI)
 ",
                 new SqlParameter("ID", id),

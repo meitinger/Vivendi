@@ -14,7 +14,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using System;
 using System.Collections.Generic;
 using System.Configuration;
 
@@ -40,7 +39,7 @@ public sealed class WebDAVSettings : ConfigurationSection
     {
         protected override ConfigurationElement CreateNewElement() => new PrincipalElement();
 
-        protected override Object GetElementKey(ConfigurationElement element) => ((PrincipalElement)element).Name;
+        protected override object GetElementKey(ConfigurationElement element) => ((PrincipalElement)element).Name;
 
         public new IEnumerator<PrincipalElement> GetEnumerator()
         {

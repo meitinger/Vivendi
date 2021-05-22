@@ -50,7 +50,7 @@ public static class WebDAVContextExtensions
             path.Append(suffix);
         }
 
-        // terminate collections with a trailing slash and return the uri
+        // terminate collections with a trailing slash and return the URI
         if (resource is VivendiCollection)
         {
             path.Append("/");
@@ -131,7 +131,7 @@ public static class WebDAVContextExtensions
                 var allowedOwners = new HashSet<SecurityIdentifier>();
                 void addSids(string propertyName, Func<string, string> queryBuilder)
                 {
-                    // search the domain and add the object's sids if the property exists
+                    // search the domain and add the object's SIDs if the property exists
                     var property = user.Properties[propertyName].OfType<string>().FirstOrDefault();
                     if (property != null)
                     {
@@ -169,7 +169,7 @@ public static class WebDAVContextExtensions
         var res = TryGetResourceInternal(context, uri, out parentCollection, out name, out var isCollection);
         if (res == null)
         {
-            // if the uri ends with a slash also treat it as a collection
+            // if the URI ends with a slash also treat it as a collection
             if (isCollection)
             {
                 throw WebDAVException.ResourceCollectionsImmutable();
@@ -187,7 +187,7 @@ public static class WebDAVContextExtensions
 
     private static VivendiResource TryGetResourceInternal(HttpContext context, Uri uri, out VivendiCollection parentCollection, out string name, out bool isCollection)
     {
-        // ensure the uri refers to the same store
+        // ensure the URI refers to the same store
         var vivendi = GetVivendi(context);
         var localPath = uri.LocalPath;
         var prefix = context.Request.ApplicationPath;
@@ -216,7 +216,7 @@ public static class WebDAVContextExtensions
             result = parentCollection.GetChild(name);
         }
 
-        // ensure that no document uri ends in a trailing slash
+        // ensure that no document URI ends in a trailing slash
         if (isCollection && result != null && !(result is VivendiCollection))
         {
             throw WebDAVException.ResourceParentNotFound(uri);
@@ -226,13 +226,13 @@ public static class WebDAVContextExtensions
 
     public static Uri VerifyUri(this HttpContext context, Uri uri)
     {
-        // if it's a relative uri, return an absolute one
+        // if it's a relative URI, return an absolute one
         if (!(uri ?? throw new ArgumentNullException(nameof(uri))).IsAbsoluteUri)
         {
             return new Uri(context.Request.Url, uri);
         }
 
-        // ensure the uri is at the same server
+        // ensure the URI is at the same server
         if (!new Uri(context.Request.Url, "/").IsBaseOf(uri))
         {
             throw WebDAVException.RequestDifferentStore(uri);

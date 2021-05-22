@@ -132,11 +132,9 @@ namespace Aufbauwerk.Tools.Vivendi
             return BuildCommand(connection, commandText, parameters).ExecuteNonQuery();
         }
 
-        internal SqlDataReader ExecuteReader(VivendiSource source, string commandText, params SqlParameter[] parameters)
-        {
+        internal SqlDataReader ExecuteReader(VivendiSource source, string commandText, params SqlParameter[] parameters) =>
             // return a reader that closes the connection once it's disposed
-            return BuildCommand(OpenConnection(source), commandText, parameters).ExecuteReader(CommandBehavior.CloseConnection);
-        }
+            BuildCommand(OpenConnection(source), commandText, parameters).ExecuteReader(CommandBehavior.CloseConnection);
 
         internal object ExecuteScalar(VivendiSource source, string commandText, params SqlParameter[] parameters)
         {
