@@ -1,4 +1,4 @@
-/* Copyright (C) 2019, Manuel Meitinger
+/* Copyright (C) 2019-2021, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,6 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -56,72 +58,27 @@ namespace Aufbauwerk.Tools.Vivendi
         : this(null, VivendiResourceType.Root, name, userName, userSid, connectionStrings)
         { }
 
-        private Vivendi(VivendiCollection parent, VivendiResourceType type, string name, string userName, SecurityIdentifier userSid, IDictionary<VivendiSource, string> connectionStrings)
+        private Vivendi(VivendiCollection? parent, VivendiResourceType type, string name, string userName, SecurityIdentifier userSid, IDictionary<VivendiSource, string> connectionStrings)
         : base(parent, type, 0, name, creationDate: DateTime.Now)
         {
             // set all properties
-            UserName = userName ?? throw new ArgumentNullException(nameof(userName));
-            UserSid = userSid ?? throw new ArgumentNullException(nameof(userSid));
-            _connectionStrings = connectionStrings ?? throw new ArgumentNullException(nameof(connectionStrings));
+            UserName = userName;
+            UserSid = userSid;
+            _connectionStrings = connectionStrings;
 
             // query the permissions
             InitializePermissions();
-        }
-
-        public Func<VivendiResource, bool> AllowModificationOfVivendiResource { internal get; set; }
-
-        public Func<VivendiResource, SecurityIdentifier, bool> AllowModificationOfOwnedResource { internal get; set; }
-
-        public override DateTime LastModified
-        {
-            get
-            {
-                EnsureCanRead();
-                return DateTime.Now;
-            }
-            set => VivendiException.ResourcePropertyIsReadonly();
         }
 
         public string UserName { get; }
 
         public SecurityIdentifier UserSid { get; }
 
-        private void AddAccessLevel(IDictionary<int, short> map, short accessLevel, ref short maxAccessLevel, int section)
-        {
-            // determine and set the maximum access level for the given section and globally
-            foreach (var sectionOrSubSection in ExpandSection(section))
-            {
-                if (!map.TryGetValue(sectionOrSubSection, out var maxAccessLevelForSection) || accessLevel > maxAccessLevelForSection)
-                {
-                    map[sectionOrSubSection] = accessLevel;
-                }
-                if (accessLevel > maxAccessLevel)
-                {
-                    maxAccessLevel = accessLevel;
-                }
-            }
-        }
-
-        private void AddAccessibleSection(IDictionary<int, ISet<int>> sectionsByObjectType, int objectType, int section)
-        {
-            // create the section set for the given object type if necessary
-            if (!sectionsByObjectType.TryGetValue(objectType, out var sections))
-            {
-                sectionsByObjectType.Add(objectType, sections = new HashSet<int>());
-            }
-
-            // add the section and all its children
-            sections.UnionWith(ExpandSection(section));
-        }
-
         private SqlCommand BuildCommand(SqlConnection connection, string commandText, SqlParameter[] parameters)
         {
             // create the command object
-            var command = new SqlCommand(commandText ?? throw new ArgumentNullException(nameof(commandText)), connection);
-            if (parameters != null)
-            {
-                command.Parameters.AddRange(parameters);
-            }
+            var command = new SqlCommand(commandText, connection);
+            command.Parameters.AddRange(parameters);
             return command;
         }
 
@@ -145,13 +102,13 @@ namespace Aufbauwerk.Tools.Vivendi
 
         internal IEnumerable<int> ExpandSection(int section) => (_sectionMap.TryGetValue(section, out var subSections) ? subSections : Enumerable.Empty<int>()).Prepend(section);
 
-        private int GetAccessLevel(IEnumerable<int> sections, int maxAccessLevel, IDictionary<int, short> accessLevels) => sections == null ? maxAccessLevel : !sections.Any() ? 0 : sections.Max(s => accessLevels.TryGetValue(s, out var level) ? level : 0);
+        private int GetAccessLevel(IEnumerable<int>? sections, int maxAccessLevel, IDictionary<int, short> accessLevels) => sections == null ? maxAccessLevel : !sections.Any() ? 0 : sections.Max(s => accessLevels.TryGetValue(s, out var level) ? level : 0);
 
-        internal int GetReadAccessLevel(IEnumerable<int> sections) => GetAccessLevel(sections, _maxReadAccessLevel, _readAccessLevels);
+        internal int GetReadAccessLevel(IEnumerable<int>? sections) => GetAccessLevel(sections, _maxReadAccessLevel, _readAccessLevels);
 
         internal IEnumerable<int> GetReadableSections(int objectType) => _readableSectionsByObjectType.TryGetValue(objectType, out var sections) ? sections : Enumerable.Empty<int>();
 
-        internal int GetWriteAccessLevel(IEnumerable<int> sections) => GetAccessLevel(sections, _maxWriteAccessLevel, _writeAccessLevels);
+        internal int GetWriteAccessLevel(IEnumerable<int>? sections) => GetAccessLevel(sections, _maxWriteAccessLevel, _writeAccessLevels);
 
         internal IEnumerable<int> GetWritableSections(int objectType) => _writableSectionsByObjectType.TryGetValue(objectType, out var sections) ? sections : Enumerable.Empty<int>();
 
@@ -211,13 +168,13 @@ WHERE
                 while (reader.Read())
                 {
                     var section = reader.GetInt32Optional("Section") ?? 0;
-                    AddAccessibleSection(_readableSectionsByObjectType, 4, section); // Bereich
+                    addAccessibleSection(_readableSectionsByObjectType, 4, section); // Bereich
                     int objectType;
                     switch (reader.GetInt32("Permission"))
                     {
                         case 71: // Dateiablage
-                            AddAccessLevel(_readAccessLevels, reader.GetInt16("Read"), ref _maxReadAccessLevel, section);
-                            AddAccessLevel(_writeAccessLevels, reader.GetInt16("Write"), ref _maxWriteAccessLevel, section);
+                            addAccessLevel(_readAccessLevels, reader.GetInt16("Read"), ref _maxReadAccessLevel, section);
+                            addAccessLevel(_writeAccessLevels, reader.GetInt16("Write"), ref _maxWriteAccessLevel, section);
                             continue;
                         case 1: // Mitarbeiter
                             objectType = 0;
@@ -230,13 +187,41 @@ WHERE
                     }
                     if (reader.GetInt16("Read") != 0)
                     {
-                        AddAccessibleSection(_readableSectionsByObjectType, objectType, section);
+                        addAccessibleSection(_readableSectionsByObjectType, objectType, section);
                     }
                     if (reader.GetInt16("Write") != 0)
                     {
-                        AddAccessibleSection(_writableSectionsByObjectType, objectType, section);
+                        addAccessibleSection(_writableSectionsByObjectType, objectType, section);
                     }
                 }
+            }
+
+            void addAccessLevel(IDictionary<int, short> map, short accessLevel, ref short maxAccessLevel, int section)
+            {
+                // determine and set the maximum access level for the given section and globally
+                foreach (var sectionOrSubSection in ExpandSection(section))
+                {
+                    if (!map.TryGetValue(sectionOrSubSection, out var maxAccessLevelForSection) || accessLevel > maxAccessLevelForSection)
+                    {
+                        map[sectionOrSubSection] = accessLevel;
+                    }
+                    if (accessLevel > maxAccessLevel)
+                    {
+                        maxAccessLevel = accessLevel;
+                    }
+                }
+            }
+
+            void addAccessibleSection(IDictionary<int, ISet<int>> sectionsByObjectType, int objectType, int section)
+            {
+                // create the section set for the given object type if necessary
+                if (!sectionsByObjectType.TryGetValue(objectType, out var sections))
+                {
+                    sectionsByObjectType.Add(objectType, sections = new HashSet<int>());
+                }
+
+                // add the section and all its children
+                sections.UnionWith(ExpandSection(section));
             }
         }
 

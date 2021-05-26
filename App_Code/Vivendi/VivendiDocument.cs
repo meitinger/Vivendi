@@ -1,4 +1,4 @@
-/* Copyright (C) 2019, Manuel Meitinger
+/* Copyright (C) 2019-2021, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,6 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -52,15 +54,11 @@ namespace Aufbauwerk.Tools.Vivendi
         : base(parent, VivendiResourceType.Named, 0, name)
         {
             _buildTime = DateTime.Now;
-            _attributes = FileAttributes.ReadOnly | (attributes & ~FileAttributes.Normal);
-            _data = data ?? throw new ArgumentNullException(nameof(data));
+            _attributes = FileAttributes.ReadOnly | (attributes & ~(FileAttributes.Normal | FileAttributes.Directory));
+            _data = data;
         }
 
-        public override FileAttributes Attributes
-        {
-            get => _attributes;
-            set => base.Attributes = value;
-        }
+        public override FileAttributes Attributes => _attributes;
 
         public override DateTime CreationDate
         {
@@ -97,11 +95,56 @@ namespace Aufbauwerk.Tools.Vivendi
 
     internal sealed class VivendiStoreDocument : VivendiDocument
     {
-        private const string WEBDAV_PREFIX = "webdav:v1:";
+        private const string GetDataCommandPart = @"ISNULL(ISNULL((SELECT [pDateiBlob] FROM [dbo].[DATEI_ABLAGE_BLOBS] WHERE [Z_DAB] = (SELECT TOP (1) [iBlobs] FROM [dbo].[DATEI_ABLAGE_BLOBS_ZUORD] WHERE [iDateiablage] = [Z_DA] ORDER BY [Revision] DESC)), [pDateiBlob]), 0x)";
+
+        private const string InsertRevisionCommand =
+@"
+DECLARE @iBlobs AS int;
+SELECT @iBlobs = ISNULL(MAX([Z_DAB]), 0) + 1
+FROM [dbo].[DATEI_ABLAGE_BLOBS];
+INSERT INTO [dbo].[DATEI_ABLAGE_BLOBS]
+(
+    Z_DAB,
+    pDateiBlob
+)
+VALUES
+(
+    @iBlobs,
+    @Blob
+);
+
+DECLARE @iZuord AS int;
+DECLARE @iRevision AS int;
+SELECT @iZuord = ISNULL(MAX([Z_DR]), 0) + 1
+FROM [dbo].[DATEI_ABLAGE_BLOBS_ZUORD];
+SELECT @iRevision = ISNULL(MAX([Revision]) + 1, 0)
+FROM [dbo].[DATEI_ABLAGE_BLOBS_ZUORD]
+WHERE [iDateiablage] = @ID;
+INSERT INTO [dbo].[DATEI_ABLAGE_BLOBS_ZUORD]
+(
+    Z_DR,
+    iDateiablage,
+    iBlobs,
+    GeaendertDatum,
+    GeaendertVon,
+    Revision
+)
+VALUES
+(
+    @iZuord,
+    @ID,
+    @iBlobs,
+    @LastModified,
+    @UserName,
+    @iRevision
+);
+";
+
+        private const string WebDAVPrefix = "webdav:v1:";
 
         private struct Template
         {
-            public Template(VivendiStoreCollection parent, int id, bool additionalTargets, int? section, SecurityIdentifier owner, string displayName, DateTime creationDate, DateTime lastModified, int size, DateTime? lockDate, bool signed)
+            public Template(VivendiStoreCollection parent, int id, bool additionalTargets, int? section, SecurityIdentifier? owner, string displayName, DateTime creationDate, DateTime lastModified, int size, DateTime? lockDate, bool signed)
             {
                 // initialize the template
                 Parent = parent;
@@ -121,7 +164,7 @@ namespace Aufbauwerk.Tools.Vivendi
             public readonly int ID;
             public readonly bool AdditionalTargets;
             public readonly int? Section;
-            public readonly SecurityIdentifier Owner;
+            public readonly SecurityIdentifier? Owner;
             public readonly string DisplayName;
             public readonly DateTime CreationDate;
             public readonly DateTime LastModified;
@@ -132,29 +175,15 @@ namespace Aufbauwerk.Tools.Vivendi
 
         internal static VivendiStoreDocument Create(VivendiStoreCollection parent, string name, DateTime creationDate, DateTime lastModified, byte[] data)
         {
-            if (parent == null)
-            {
-                throw new ArgumentNullException(nameof(parent));
-            }
-            if (name == null)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
-            if (data == null)
-            {
-                throw new ArgumentNullException(nameof(data));
-            }
             EnsureValidName(ref name);
             parent.EnsureCanWrite();
             EnsureSize(parent.MaxDocumentSize, data.Length);
             var owner = parent.Vivendi.UserSid;
             var lockDate = !parent.LockAfterMonths.HasValue ? (DateTime?)null : DateTime.Now.Date.AddMonths(parent.LockAfterMonths.Value);
             var id = new SqlParameter("ID", SqlDbType.Int) { Direction = ParameterDirection.Output };
-            parent.Vivendi.ExecuteNonQuery
-            (
-                VivendiSource.Store,
+            const string command =
 @"
-SELECT @ID = MAX([Z_DA]) + 1
+SELECT @ID = ISNULL(MAX([Z_DA]), 0) + 1
 FROM [dbo].[DATEI_ABLAGE];
 INSERT INTO [dbo].[DATEI_ABLAGE]
 (
@@ -171,8 +200,8 @@ INSERT INTO [dbo].[DATEI_ABLAGE]
     [ErstelltVon],
     [bGeZippt],
     [GeaendertDatum],
+    [GeaendertVon],
     [BelegDatum],
-    [pDateiBlob],
     [Sperrdatum],
     [bUnterschrieben],
     [CloudTyp],
@@ -192,18 +221,22 @@ VALUES
     @CreationDate,
     @UserName,
     0,
-    CASE WHEN @CreationDate = @LastModified THEN NULL ELSE @LastModified END,
-    CAST(@CreationDate AS date),
-    @Blob,
+    @LastModified,
+    @UserName,
+    CONVERT(date, @CreationDate),
     @LockDate,
     0,
     -2,
     0
-)
-",
+);
+";
+            parent.Vivendi.ExecuteNonQuery
+            (
+                VivendiSource.Store,
+                data.Length == 0 ? command : command + InsertRevisionCommand,
                 id,
                 new SqlParameter("Parent", parent.ID),
-                new SqlParameter("TargetIndex", (object)parent.ObjectID ?? DBNull.Value),
+                new SqlParameter("TargetIndex", (object?)parent.ObjectID ?? DBNull.Value),
                 new SqlParameter("TargetTable", parent.ObjectType),
                 new SqlParameter("Location", FormatOwner(owner)),
                 new SqlParameter("Name", name),
@@ -211,15 +244,24 @@ VALUES
                 new SqlParameter("CreationDate", creationDate),
                 new SqlParameter("LastModified", lastModified),
                 new SqlParameter("UserName", parent.Vivendi.UserName),
-                new SqlParameter("Blob", data),
-                new SqlParameter("LockDate", (object)lockDate ?? DBNull.Value)
+                new SqlParameter("LockDate", (object?)lockDate ?? DBNull.Value),
+                new SqlParameter("Blob", data)
             );
-            return new VivendiStoreDocument(parent, (int)id.Value, owner, name, creationDate, lastModified, data, lockDate);
+            return new VivendiStoreDocument
+            (
+                parent: parent,
+                id: (int)id.Value,
+                displayName: name,
+                creationDate: creationDate,
+                lastModified: lastModified,
+                data: data,
+                lockDate: lockDate
+            );
         }
 
         private static void EnsureNameLength(string name)
         {
-            // make sure the name is not empty of too long
+            // make sure the name is not empty or too long
             const int MaxLength = 255;
             if (name.Length == 0)
             {
@@ -251,9 +293,9 @@ VALUES
             }
         }
 
-        private static string FormatOwner(SecurityIdentifier owner) => WEBDAV_PREFIX + owner;
+        private static string FormatOwner(SecurityIdentifier owner) => WebDAVPrefix + owner;
 
-        private static IEnumerable<VivendiStoreDocument> FromNamedTemplates(IEnumerable<Template> templates, SecurityIdentifier owner, bool allowTyped)
+        private static IEnumerable<VivendiStoreDocument> FromTemplatesWithSameName(IEnumerable<Template> templates, SecurityIdentifier owner, bool allowTyped)
         {
             using var enumerator = templates.GetEnumerator();
 
@@ -285,7 +327,7 @@ VALUES
                         // check if this is the second document owned by the user
                         if (hasOwned)
                         {
-                            // return all remaining documents as typed if allowed and exit
+                            // return all remaining documents as typed if allowed
                             if (allowTyped)
                             {
                                 yield return new VivendiStoreDocument(false, template);
@@ -295,6 +337,8 @@ VALUES
                                     yield return new VivendiStoreDocument(false, enumerator.Current);
                                 }
                             }
+
+                            // always exit
                             yield break;
                         }
 
@@ -312,7 +356,7 @@ VALUES
                     }
                 } while (enumerator.MoveNext());
 
-                // there are more documents but none is owned by the user, exit
+                // there are no more documents but none is owned by the user, exit
                 if (!hasOwned)
                 {
                     yield break;
@@ -323,14 +367,14 @@ VALUES
             yield return new VivendiStoreDocument(true, template);
         }
 
-        private static SecurityIdentifier ParseOwner(string location)
+        private static SecurityIdentifier? ParseOwner(string location)
         {
             // check the prefix and parse the SID
-            if (!location.StartsWith(WEBDAV_PREFIX, StringComparison.OrdinalIgnoreCase))
+            if (!location.StartsWith(WebDAVPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 return null;
             }
-            var sddl = location.Substring(WEBDAV_PREFIX.Length);
+            var sddl = location.Substring(WebDAVPrefix.Length);
             try { return new SecurityIdentifier(sddl); }
             catch (ArgumentException) { return null; }
         }
@@ -349,39 +393,38 @@ SELECT
     [Dateiname] AS [DisplayName],
     [Dateidatum] AS [CreationDate],
     ISNULL([GeaendertDatum], [Dateidatum]) AS [LastModified],
-    DATALENGTH(pDateiBlob) AS [Size],
+    CONVERT(int, DATALENGTH(" + GetDataCommandPart + @")) AS [Size],
     [Sperrdatum] AS [LockDate],
     CONVERT(bit, [bUnterschrieben]) AS [Signed]
 FROM [dbo].[DATEI_ABLAGE]
 WHERE
     (@ID IS NULL OR [Z_DA] = @ID) AND                                                  -- match the ID if one is given
     [iDokumentArt] = @Parent AND                                                       -- query within the parent collection
-    [iSeriendruck] IS NULL AND                                                         -- no reports
+    [iSeriendruck] IS NULL AND [iSerieDatensatz] IS NULL AND                           -- no reports
     ([ZielIndex1] IS NULL AND @TargetIndex IS NULL OR [ZielIndex1] = @TargetIndex) AND -- query for a object instance
     [ZielTabelle1] = @TargetTable AND                                                  -- query for a object type
-    [bGeZippt] = 0 AND                                                                 -- no zipped docs (because not reproducible in Vivendi)
-    [CloudTyp] = -2                                                                    -- no cloud documents (also not found in UI)
+    [bGeZippt] = 0                                                                     -- no zipped docs (because not reproducible in Vivendi)
 ",
                 new SqlParameter("ID", id),
                 new SqlParameter("Parent", parent.ID),
-                new SqlParameter("TargetIndex", (object)parent.ObjectID ?? DBNull.Value),
+                new SqlParameter("TargetIndex", (object?)parent.ObjectID ?? DBNull.Value),
                 new SqlParameter("TargetTable", parent.ObjectType)
             );
             while (reader.Read())
             {
                 yield return new Template
                 (
-                    parent,
-                    reader.GetInt32("ID"),
-                    reader.GetBoolean("AdditionalTargets"),
-                    reader.GetInt32Optional("Section"),
-                    ParseOwner(reader.GetStringOptional("Location")),
-                    reader.GetString("DisplayName"),
-                    reader.GetDateTime("CreationDate"),
-                    reader.GetDateTime("LastModified"),
-                    reader.GetInt32("Size"),
-                    reader.GetDateTimeOptional("LockDate"),
-                    reader.GetBoolean("Signed")
+                    parent: parent,
+                    id: reader.GetInt32("ID"),
+                    additionalTargets: reader.GetBoolean("AdditionalTargets"),
+                    section: reader.GetInt32Optional("Section"),
+                    owner: ParseOwner(reader.GetString("Location")),
+                    displayName: reader.GetString("DisplayName"),
+                    creationDate: reader.GetDateTime("CreationDate"),
+                    lastModified: reader.GetDateTime("LastModified"),
+                    size: reader.GetInt32("Size"),
+                    lockDate: reader.GetDateTimeOptional("LockDate"),
+                    signed: reader.GetBoolean("Signed")
                 );
             }
         }
@@ -389,42 +432,29 @@ WHERE
         internal static IEnumerable<VivendiStoreDocument> QueryAll(VivendiStoreCollection parent)
         {
             // cache the owner and return all documents
-            var owner = (parent ?? throw new ArgumentNullException(nameof(parent))).Vivendi.UserSid;
+            var owner = parent.Vivendi.UserSid;
             return Query(parent, DBNull.Value)
                 .ToLookup(t => t.DisplayName, Vivendi.PathComparer)
                 .SelectMany
                 (
                     // only use the named logic if the document name is valid and not a reserved type/id string
                     ts => ts.Key.Length > 0 && ts.Key[ts.Key.Length - 1] != '.' && IsValidName(ts.Key) && !TryParseTypeAndID(ts.Key, out _, out _)
-                    ? FromNamedTemplates(ts, owner, true)
+                    ? FromTemplatesWithSameName(ts, owner, true)
                     : ts.Select(t => new VivendiStoreDocument(false, t))
                 );
         }
 
-        internal static VivendiStoreDocument QueryByID(VivendiStoreCollection parent, int id) => Query(parent ?? throw new ArgumentNullException(nameof(parent)), id).Select(t => new VivendiStoreDocument(false, t)).SingleOrDefault();
+        internal static VivendiStoreDocument QueryByID(VivendiStoreCollection parent, int id) => Query(parent, id).Select(t => new VivendiStoreDocument(false, t)).SingleOrDefault();
 
-        internal static VivendiStoreDocument QueryByName(VivendiStoreCollection parent, string name)
-        {
-            // check the arguments and return the document with the given name, if there is just one (or just one owned by the current user)
-            if (parent == null)
-            {
-                throw new ArgumentNullException(nameof(parent));
-            }
-            if (name == null)
-            {
-                throw new ArgumentNullException(nameof(name));
-            }
-            return FromNamedTemplates(Query(parent, DBNull.Value).Where(t => string.Equals(t.DisplayName, name, Vivendi.PathComparison)), parent.Vivendi.UserSid, false).SingleOrDefault();
-        }
+        internal static VivendiStoreDocument QueryByName(VivendiStoreCollection parent, string name) => FromTemplatesWithSameName(Query(parent, DBNull.Value).Where(t => string.Equals(t.DisplayName, name, Vivendi.PathComparison)), parent.Vivendi.UserSid, false).SingleOrDefault();
 
         private readonly bool _additionalTargets;
         private DateTime _creationDate;
-        private byte[] _data;
+        private byte[]? _data;
         private string _displayName;
         private bool _isDeletedOrMoved;
         private DateTime _lastModified;
         private readonly DateTime? _lockDate;
-        private readonly SecurityIdentifier _owner;
         private readonly VivendiStoreCollection _parent;
         private readonly bool _signed;
         private int _size;
@@ -438,7 +468,6 @@ WHERE
             {
                 Sections = Enumerable.Repeat(template.Section.Value, 1);
             }
-            _owner = template.Owner;
             _displayName = template.DisplayName;
             _creationDate = template.CreationDate;
             _lastModified = template.LastModified;
@@ -448,12 +477,11 @@ WHERE
             _signed = template.Signed;
         }
 
-        private VivendiStoreDocument(VivendiStoreCollection parent, int id, SecurityIdentifier owner, string displayName, DateTime creationDate, DateTime lastModified, byte[] data, DateTime? lockDate)
+        private VivendiStoreDocument(VivendiStoreCollection parent, int id, string displayName, DateTime creationDate, DateTime lastModified, byte[] data, DateTime? lockDate)
         : base(parent, VivendiResourceType.StoreDocument, id, displayName)
         {
             _parent = parent;
             _additionalTargets = false;
-            _owner = owner;
             _displayName = displayName;
             _creationDate = creationDate;
             _lastModified = lastModified;
@@ -462,11 +490,7 @@ WHERE
             _lockDate = lockDate;
         }
 
-        public override FileAttributes Attributes
-        {
-            get => base.Attributes | (!CheckWrite(true) ? FileAttributes.ReadOnly : 0);
-            set => base.Attributes = value;
-        }
+        public override FileAttributes Attributes => base.Attributes | (!CheckWrite(true) ? FileAttributes.ReadOnly : 0);
 
         public override DateTime CreationDate
         {
@@ -512,7 +536,7 @@ WHERE [Z_DA] = @ID
                     (
                         VivendiSource.Store,
 @"
-SELECT [pDateiBlob]
+SELECT " + GetDataCommandPart + @"
 FROM [dbo].[DATEI_ABLAGE]
 WHERE [Z_DA] = @ID
 ",
@@ -523,14 +547,8 @@ WHERE [Z_DA] = @ID
             }
             set
             {
-                // check the value and whether the document still exists
-                if (value == null)
-                {
-                    throw new ArgumentNullException(nameof(Data));
-                }
-                EnsureNotDeletedOrMoved();
-
                 // ensure all necessary conditions for a write operation
+                EnsureNotDeletedOrMoved();
                 EnsureCanWrite();
                 EnsureSize(_parent.MaxDocumentSize, value.Length);
 
@@ -542,11 +560,10 @@ WHERE [Z_DA] = @ID
 @"
 UPDATE [dbo].[DATEI_ABLAGE]
 SET
-    [pDateiBlob] = @Blob,
     [GeaendertDatum] = @LastModified,
     [GeaendertVon] = @UserName
-WHERE [Z_DA] = @ID
-",
+WHERE [Z_DA] = @ID;
+" + InsertRevisionCommand,
                     new SqlParameter("Blob", value),
                     new SqlParameter("UserName", Vivendi.UserName),
                     new SqlParameter("LastModified", lastModified),
@@ -569,7 +586,7 @@ WHERE [Z_DA] = @ID
             set
             {
                 // check the value and ensure the document still exists
-                EnsureNameLength(value ?? throw new ArgumentNullException(nameof(DisplayName)));
+                EnsureNameLength(value);
                 EnsureNotDeletedOrMoved();
 
                 // update the document if the name has changed
@@ -651,22 +668,6 @@ WHERE [Z_DA] = @ID
                 return dontThrow ? false : throw VivendiException.DocumentIsSigned();
             }
 
-            // check if the file was uploaded by WebDAV
-            if (_owner == null)
-            {
-                if (Vivendi.AllowModificationOfVivendiResource?.Invoke(this) == true)
-                {
-                    return true;
-                }
-                return dontThrow ? false : throw VivendiException.DocumentIsNotWebDAV();
-            }
-
-            // check if it's the same owner or the owner's manager
-            if (_owner != Vivendi.UserSid && Vivendi.AllowModificationOfOwnedResource?.Invoke(this, _owner) != true)
-            {
-                return dontThrow ? false : throw VivendiException.DocumentHasDifferentOwner();
-            }
-
             // document is writable
             return true;
         }
@@ -677,12 +678,23 @@ WHERE [Z_DA] = @ID
             EnsureNotDeletedOrMoved();
             EnsureCanWrite();
             EnsureNoAdditionalTargets();
+            EnsureNoRetainedRevisions();
+
             Vivendi.ExecuteNonQuery
             (
                 VivendiSource.Store,
 @"
+DELETE FROM [dbo].[DATEI_ABLAGE_BLOBS]
+WHERE [Z_DAB] IN
+(
+    SELECT [iBlobs]
+    FROM [dbo].[DATEI_ABLAGE_BLOBS_ZUORD]
+    WHERE [iDateiablage] = @ID
+);
+DELETE FROM [dbo].[DATEI_ABLAGE_BLOBS_ZUORD]
+WHERE [iDateiablage] = @ID;
 DELETE FROM [dbo].[DATEI_ABLAGE]
-WHERE [Z_DA] = @ID
+WHERE [Z_DA] = @ID;
 ",
                 new SqlParameter("ID", ID)
             );
@@ -705,6 +717,15 @@ WHERE [Z_DA] = @ID
             }
         }
 
+        private void EnsureNoRetainedRevisions()
+        {
+            // make sure that the document type does not enforce to retain revisions
+            if (_parent.RetainRevisions)
+            {
+                throw VivendiException.DocumentHasRevisions();
+            }
+        }
+
         private void EnsureNotDeletedOrMoved()
         {
             if (_isDeletedOrMoved)
@@ -715,15 +736,7 @@ WHERE [Z_DA] = @ID
 
         public override void MoveTo(VivendiCollection destCollection, string destName)
         {
-            // check the value and that the document still exists
-            if (destCollection == null)
-            {
-                throw new ArgumentNullException(nameof(destCollection));
-            }
-            if (destName == null)
-            {
-                throw new ArgumentNullException(nameof(destName));
-            }
+            // check the values and that the document still exists
             var parent = destCollection as VivendiStoreCollection ?? throw VivendiException.DocumentNotAllowedInCollection();
             EnsureValidName(ref destName);
             EnsureNotDeletedOrMoved();
@@ -732,6 +745,10 @@ WHERE [Z_DA] = @ID
             parent.EnsureCanWrite();
             EnsureCanWrite();
             EnsureNoAdditionalTargets();
+            if (!parent.RetainRevisions)
+            {
+                EnsureNoRetainedRevisions();
+            }
 
             // move the document
             Vivendi.ExecuteNonQuery
@@ -748,7 +765,7 @@ SET
 WHERE [Z_DA] = @ID
 ",
                 new SqlParameter("Parent", parent.ID),
-                new SqlParameter("TargetIndex", (object)parent.ObjectID ?? DBNull.Value),
+                new SqlParameter("TargetIndex", (object?)parent.ObjectID ?? DBNull.Value),
                 new SqlParameter("TargetTable", parent.ObjectType),
                 new SqlParameter("TargetDescription", parent.ObjectName),
                 new SqlParameter("Name", destName),

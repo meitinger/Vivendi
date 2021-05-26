@@ -1,4 +1,4 @@
-/* Copyright (C) 2019, Manuel Meitinger
+/* Copyright (C) 2019-2021, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -14,6 +14,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#nullable enable
+
 using Aufbauwerk.Tools.Vivendi;
 using System;
 using System.Collections.Generic;
@@ -22,6 +24,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Transactions;
 using System.Web;
 using System.Web.SessionState;
 using System.Xml;
@@ -52,7 +55,12 @@ public abstract class WebDAVHandler : IHttpHandler, IRequiresSessionState
     public void ProcessRequest(HttpContext context)
     {
         // process the request
-        try { context.Response.StatusCode = (int)ProcessRequestInternal(context); }
+        try
+        {
+            using var scope = new TransactionScope();
+            context.Response.StatusCode = (int)ProcessRequestInternal(context);
+            scope.Complete();
+        }
         catch (VivendiException e) { HandleException(context, WebDAVException.FromVivendiException(e)); }
         catch (WebDAVException e) { HandleException(context, e); }
     }
@@ -166,7 +174,7 @@ public abstract class WebDAVPropHandler : WebDAVHandler
 
         public static IEnumerable<Property> All => _properties.Values;
 
-        public static Property FromName(PropertyName name) => _properties.TryGetValue(name, out var property) ? property : null;
+        public static Property? FromName(PropertyName name) => _properties.TryGetValue(name, out var property) ? property : null;
 
         protected static void Register(Property property) => _properties.Add(property.Name, property);
 
@@ -201,8 +209,8 @@ public abstract class WebDAVPropHandler : WebDAVHandler
         private Property(string namespaceURI, string localName, bool isProtected, Action<T, XmlElement> getter, Action<T, XmlElement> setter)
         : base(new PropertyName(namespaceURI, localName), isProtected)
         {
-            _getter = getter ?? throw new ArgumentNullException(nameof(getter));
-            _setter = setter ?? throw new ArgumentNullException(nameof(setter));
+            _getter = getter;
+            _setter = setter;
         }
 
         public override void Get(VivendiResource resource, XmlElement value) => _getter(resource as T ?? throw new ArgumentOutOfRangeException("resource"), value);
@@ -216,8 +224,8 @@ public abstract class WebDAVPropHandler : WebDAVHandler
     {
         public PropertyName(string namespaceURI, string localName)
         {
-            NamespaceURI = namespaceURI ?? throw new ArgumentNullException(nameof(namespaceURI));
-            LocalName = localName ?? throw new ArgumentNullException(nameof(localName));
+            NamespaceURI = namespaceURI;
+            LocalName = localName;
         }
 
         public PropertyName(XmlElement e)
@@ -330,7 +338,7 @@ public abstract class WebDAVPropHandler : WebDAVHandler
 
                 // append the responsedescription element, if there is a message
                 var message = entry.Key.Message;
-                if (message != null)
+                if (!string.IsNullOrEmpty(message))
                 {
                     propstatElement.AppendChild(doc.CreateElement("responsedescription", DAV)).InnerText = message;
                 }
@@ -381,11 +389,12 @@ public sealed class WebDAVGetHandler : WebDAVGetAndHeadHandler
         response.Append(@"<html><head><meta charset=""utf-8""/><title>/");
         response.Append(HttpUtility.HtmlEncode(string.Join("/", collection.SelfAndAncestors.Select(c => c.DisplayName).Reverse().Skip(1))));
         response.Append(@"</title></head><body>");
-        if (collection.Type != VivendiResourceType.Root)
+        var parent = collection.Parent;
+        if (parent != null)
         {
             response
                 .Append(@"<a href=""")
-                .Append(context.GetRelativeHref(collection.Parent))
+                .Append(context.GetRelativeHref(parent))
                 .Append(@""">[..]</a><br/>");
         }
 
@@ -532,7 +541,7 @@ public sealed class WebDAVPropPatchHandler : WebDAVPropHandler
         // determine which elements should be set or removed
         var resources = Enumerable.Repeat(context.GetResource(), 1);
         var propertyupdateElement = ReadXml(context, "propertyupdate");
-        var actions = new Dictionary<PropertyName, XmlElement>();
+        var actions = new Dictionary<PropertyName, XmlElement?>();
         foreach (var element in propertyupdateElement.ChildNodes.OfType<XmlElement>().Where(e => e.NamespaceURI == DAV))
         {
             // check if it's a set or remove operation

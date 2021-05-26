@@ -1,4 +1,4 @@
-/* Copyright (C) 2019, Manuel Meitinger
+/* Copyright (C) 2019-2021, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,6 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#nullable enable
 
 using System;
 using System.Runtime.CompilerServices;
@@ -31,9 +33,8 @@ namespace Aufbauwerk.Tools.Vivendi
         private const int FACILITY_WIN32 = 7;
 
         internal static VivendiException DocumentContainsAdditionalLinks() => new VivendiException("The document contains additional links and should therefore only be modified within Vivendi.");
-        internal static VivendiException DocumentHasDifferentOwner() => new VivendiException("The document was uploaded by a different user.");
+        internal static VivendiException DocumentHasRevisions() => new VivendiException("The document has revisions that cannot be deleted or moved.");
         internal static VivendiException DocumentIsLocked(DateTime lockDate) => new VivendiException(ERROR_LOCK_VIOLATION, $"The document has been locked since {lockDate}.");
-        internal static VivendiException DocumentIsNotWebDAV() => new VivendiException("The document was created or modified in Vivendi and therefore cannot be modified outside.");
         internal static VivendiException DocumentIsSigned() => new VivendiException("The document was signed and cannot be modified.");
         internal static VivendiException DocumentIsTooLarge(int maxSize) => new VivendiException(ERROR_FILE_TOO_LARGE, $"The document exceeds the size of {maxSize} bytes.");
         internal static VivendiException DocumentNotAllowedInCollection() => new VivendiException(ERROR_NOT_SUPPORTED, "Documents cannot be created in or copied/moved to this collection.");

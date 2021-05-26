@@ -1,4 +1,4 @@
-/* Copyright (C) 2019, Manuel Meitinger
+/* Copyright (C) 2019-2021, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,6 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -33,7 +35,7 @@ public static class VivendiSqlExtensions
 
     public static IEnumerable<int> GetIDs(this SqlDataReader reader, string column) => GetIDsOptional(reader, column) ?? throw new SqlNullValueException();
 
-    public static IEnumerable<int> GetIDsOptional(this SqlDataReader reader, string column) => GetStringOptional(reader, column)?.Split(',').Select(s => int.Parse(s, CultureInfo.InvariantCulture));
+    public static IEnumerable<int>? GetIDsOptional(this SqlDataReader reader, string column) => GetStringOptional(reader, column)?.Split(',').Select(s => int.Parse(s, CultureInfo.InvariantCulture));
 
     public static short GetInt16(this SqlDataReader reader, string column) => reader.GetInt16(reader.GetOrdinal(column));
 
@@ -52,7 +54,7 @@ public static class VivendiSqlExtensions
 
     public static string GetString(this SqlDataReader reader, string column) => reader.GetString(reader.GetOrdinal(column));
 
-    public static string GetStringOptional(this SqlDataReader reader, string column)
+    public static string? GetStringOptional(this SqlDataReader reader, string column)
     {
         var i = reader.GetOrdinal(column);
         return !reader.IsDBNull(i) ? reader.GetString(i) : null;

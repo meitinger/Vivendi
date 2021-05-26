@@ -1,4 +1,4 @@
-/* Copyright (C) 2019, Manuel Meitinger
+/* Copyright (C) 2019-2021, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,6 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#nullable enable
 
 using System;
 using System.Collections.Generic;
@@ -36,14 +38,26 @@ namespace Aufbauwerk.Tools.Vivendi
 
     public abstract class VivendiResource
     {
+        private struct ObjectInstance
+        {
+            public ObjectInstance(int? id, string name)
+            {
+                ID = id;
+                Name = name;
+            }
+
+            public readonly int? ID;
+            public readonly string Name;
+        }
+
         private static readonly char[] InvalidNameChars = new char[] { '"', '<', '>', '|', '\0', '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\a', '\b', '\t', '\n', '\v', '\f', '\r', '\u000e', '\u000f', '\u0010', '\u0011', '\u0012', '\u0013', '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001a', '\u001b', '\u001c', '\u001d', '\u001e', '\u001f', ':', '*', '?', '\\', '/' };
 
-        internal static bool IsValidName(string name) => (name ?? throw new ArgumentNullException(nameof(name))).IndexOfAny(InvalidNameChars) == -1;
+        internal static bool IsValidName(string name) => name.IndexOfAny(InvalidNameChars) == -1;
 
         internal static bool TryParseTypeAndID(string name, out VivendiResourceType type, out int id)
         {
             // remove the extension and parse the remaining name
-            var dot = (name ?? throw new ArgumentNullException(nameof(name))).LastIndexOf('.');
+            var dot = name.LastIndexOf('.');
             var typeAndId = (dot > -1 ? name.Substring(0, dot) : name).Split('-');
             if (typeAndId.Length == 2 && int.TryParse(typeAndId[0], NumberStyles.None, CultureInfo.InvariantCulture, out var typeNumeric) && int.TryParse(typeAndId[1], NumberStyles.None, CultureInfo.InvariantCulture, out id))
             {
@@ -58,14 +72,11 @@ namespace Aufbauwerk.Tools.Vivendi
             }
         }
 
-
-        private bool _hasObjectInstance = false;
-        private int? _objectID;
-        private string _objectName;
+        private ObjectInstance? _objectInstance;
         private int? _objectType;
-        private ISet<int> _sections;
+        private ISet<int>? _sections;
 
-        internal VivendiResource(VivendiCollection parent, VivendiResourceType type, int id, string name)
+        internal VivendiResource(VivendiCollection? parent, VivendiResourceType type, int id, string name)
         {
             // check the arguments
             if (!Enum.IsDefined(typeof(VivendiResourceType), type))
@@ -87,8 +98,8 @@ namespace Aufbauwerk.Tools.Vivendi
             ID = id;
 
             // get the extension and set the localized name
+            LocalizedName = name;
             var extension = string.Empty;
-            LocalizedName = name ?? throw new ArgumentNullException(nameof(name));
             if (!(this is VivendiCollection))
             {
                 var dot = name.LastIndexOf('.');
@@ -128,9 +139,13 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public abstract string DisplayName { get; set; }
 
-        protected internal bool HasObjectInstance => SelfAndAncestorsWithSameObjectType.Any(r => r._hasObjectInstance);
+        private ObjectInstance FirstObjectInstance => FirstObjectInstanceOrNull ?? throw new InvalidOperationException("Object instance has not been set.");
 
-        protected internal bool HasObjectType => SelfAndAncestors.Any(r => r._objectType.HasValue);
+        private ObjectInstance? FirstObjectInstanceOrNull => SelfAndAncestorsWithSameObjectType.FirstOrDefault(r => r._objectInstance.HasValue)?._objectInstance;
+
+        protected internal bool HasObjectInstance => FirstObjectInstanceOrNull.HasValue;
+
+        protected internal bool HasObjectType => ObjectTypeOrNull.HasValue;
 
         internal int ID { get; }
 
@@ -142,39 +157,55 @@ namespace Aufbauwerk.Tools.Vivendi
 
         public string Name { get; }
 
-        protected internal int? ObjectID => ObjectInstanceResource._objectID;
+        protected internal int? ObjectID => FirstObjectInstance.ID;
 
-        private VivendiResource ObjectInstanceResource => SelfAndAncestorsWithSameObjectType.FirstOrDefault(r => r._hasObjectInstance) ?? throw new InvalidOperationException("Object instance has not been set.");
-
-        protected internal string ObjectName => ObjectInstanceResource._objectName;
+        protected internal string ObjectName => FirstObjectInstance.Name;
 
         protected internal int ObjectType
         {
-            get => SelfAndAncestors.FirstOrDefault(r => r._objectType.HasValue)?._objectType ?? throw new InvalidOperationException("Object type has not been set.");
+            get => ObjectTypeOrNull ?? throw new InvalidOperationException("Object type has not been set.");
             protected set => _objectType = value;
         }
 
+        private int? ObjectTypeOrNull => SelfAndAncestors.FirstOrDefault(r => r._objectType.HasValue)?._objectType;
+
         public string Path => Type == VivendiResourceType.Root ? "/" : string.Join("/", SelfAndAncestors.Reverse().Select(r => r.Name));
 
-        public VivendiCollection Parent { get; }
+        public VivendiCollection? Parent { get; }
 
         protected int RequiredAccessLevel { get; set; }
 
-        protected IEnumerable<int> Sections
+        protected IEnumerable<int>? Sections
         {
             get => _sections;
             set => _sections = value?.ToHashSet();
         }
 
-        internal IEnumerable<VivendiResource> SelfAndAncestors => WalkParentTree(r => r.Type == VivendiResourceType.Root);
+        internal IEnumerable<VivendiResource> SelfAndAncestors
+        {
+            get
+            {
+                for (var res = this; res != null; res = res.Parent)
+                {
+                    yield return res;
+                }
+            }
+        }
 
-        private IEnumerable<VivendiResource> SelfAndAncestorsWithSameObjectType => WalkParentTree(r => r.Type == VivendiResourceType.Root || r._objectType.HasValue);
+        private IEnumerable<VivendiResource> SelfAndAncestorsWithSameObjectType
+        {
+            get
+            {
+                var objectType = ObjectTypeOrNull;
+                return objectType == null ? Enumerable.Empty<VivendiResource>() : SelfAndAncestors.TakeWhile(r => r.ObjectTypeOrNull == objectType);
+            }
+        }
 
         public VivendiResourceType Type { get; }
 
         public Vivendi Vivendi => SelfAndAncestors.OfType<Vivendi>().First();
 
-        private bool CheckPermission(Func<IEnumerable<int>, int> getAccessLevel, Func<int, IEnumerable<int>> getSections, bool dontThrow)
+        private bool CheckPermission(Func<IEnumerable<int>?, int> getAccessLevel, Func<int, IEnumerable<int>> getSections, bool dontThrow)
         {
             // make sure all access levels are sufficient
             if (SelfAndAncestors.Any(r => r.RequiredAccessLevel >= getAccessLevel(r.Sections)))
@@ -214,23 +245,7 @@ namespace Aufbauwerk.Tools.Vivendi
             {
                 throw new InvalidOperationException("Object type must be set before the instance.");
             }
-            _objectID = id;
-            _objectName = name ?? throw new ArgumentNullException(nameof(name));
-            _hasObjectInstance = true;
-        }
-
-        private IEnumerable<VivendiResource> WalkParentTree(Func<VivendiResource, bool> until)
-        {
-            var res = this;
-            while (true)
-            {
-                yield return res;
-                if (until(res))
-                {
-                    break;
-                }
-                res = res.Parent;
-            }
+            _objectInstance = new ObjectInstance(id, name);
         }
     }
 }

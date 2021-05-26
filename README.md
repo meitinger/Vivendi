@@ -9,13 +9,9 @@ contain a different folder view for each _Bereich_ but rather shows them
 altogether. To be clear: Files stored in different _Bereiche_ are of course
 separated in different folders, each with different permissions, but if a file
 is set to be **viewed** only in one _Bereich_ it will be displayed as long as
-the user can access this _Bereich_. So in a way it's equivalent to open a
+the user can access that _Bereich_. So in a way it's equivalent to open a
 folder in Vivendi and going through each _Bereich_ in the top selector.
 
-In general the application tracks who uploaded a file via WebDAV (this user is
-called the _owner_) and does not allow the modification of files that where
-stored directly in Vivendi. This behavior can the fine-tuned in `web.config`
-(see the [configuration section](#configuration) below)  
 The logon is done by using Windows Authentication, and the user name used in
 Vivendi is the same as the Windows user name (minus the domain name). This of
 course could easily be changed. It would even be possible to use basic
@@ -24,8 +20,7 @@ the WebDAV redirector some limitation might apply on what is allowed without
 SSL, see [Using the WebDAV Redirector](https://docs.microsoft.com/en-us/iis/publish/using-webdav/using-the-webdav-redirector#webdav-redirector-registry-settings).
 
 As Vivendi allows multiple files to have the same name, file names are not
-always translated 1:1 from Vivendi to WebDAV. If a user owns more than one or
-no file at all with the same name in the same folder, the localization feature
+always translated 1:1 from Vivendi to WebDAV. Instead the localization feature
 of Windows Explorer is utilized to display the same name multiple times.
 In that case the actually file name is an ID referencing the actual file.  
 The same applies to files that have illegal characters in their name or adhere
@@ -57,24 +52,3 @@ To create the necessary permissions, first set up a database user named
 the `VivAmbulant` and `VivDateiAblage` databases. Finally set the database
 server name and `WebDAV` user password in the `connectionStrings` section of
 `web.sample.config` and rename it to `web.config`.
-
-### Configuration
-
-The last step is to adjust the `webDAVSettings` section in `web.config`. Here
-you can set which users or groups are allowed to modify resources that are
-owned by someone else (`allowModificationOfOwnedResources` subsection) or even
-resources that were not uploaded via WebDAV but created in Vivendi instead
-(`allowModificationOfVivendiResources` subsection).  
-Each of these sections allows to add users and groups in the form
-
-    <add name="[<DOMAIN>\]<account>" type="User|Group" />
-
-The `allowModificationOfOwnedResources` section also has two special boolean
-attributes:
-
-- `managers`: Allows all managers of an owner to modify his or her files.
-- `team`:     Allows everyone who has the same manager as the owner to modify
-              his or her files.
-
-These attributes require domain functionality. In _very_ large domains the
-`managers` attribute should be used with care.

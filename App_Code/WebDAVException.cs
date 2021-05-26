@@ -1,4 +1,4 @@
-/* Copyright (C) 2019, Manuel Meitinger
+/* Copyright (C) 2019-2021, Manuel Meitinger
  * 
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -13,6 +13,8 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
+#nullable enable
 
 using Aufbauwerk.Tools.Vivendi;
 using System;
@@ -37,13 +39,13 @@ public sealed class WebDAVException : Exception
     public static WebDAVException FromVivendiException(VivendiException e) => new WebDAVException(e.ErrorCode == ERROR_FILE_TOO_LARGE ? (HttpStatusCode)507 : HttpStatusCode.Forbidden, e.ErrorCode, e.Message);
 
     private static WebDAVException PropertyInvalid(string message) => new WebDAVException(HttpStatusCode.Conflict, ERROR_INVALID_PARAMETER, message);
-    internal static WebDAVException PropertyInvalidHexNumber() => PropertyInvalid($"Not a valid hexadecimal number.");
-    internal static WebDAVException PropertyInvalidRountripTime() => PropertyInvalid($"Not a valid roundtrip time.");
-    internal static WebDAVException PropertyInvalidTimestamp() => PropertyInvalid($"Not a valid timestamp value.");
+    internal static WebDAVException PropertyInvalidHexNumber() => PropertyInvalid("Not a valid hexadecimal number.");
+    internal static WebDAVException PropertyInvalidRountripTime() => PropertyInvalid("Not a valid roundtrip time.");
+    internal static WebDAVException PropertyInvalidTimestamp() => PropertyInvalid("Not a valid timestamp value.");
     internal static WebDAVException PropertyIsProtected() => new WebDAVException(HttpStatusCode.Forbidden, ERROR_WRITE_PROTECT, "Cannot change a protected property.", "cannot-modify-protected-property");
     internal static WebDAVException PropertyNotFound() => new WebDAVException(HttpStatusCode.NotFound, ERROR_NOT_FOUND, "No property with this name exists.");
     internal static WebDAVException PropertyNotRemovable() => new WebDAVException(HttpStatusCode.NotImplemented, ERROR_NOT_SUPPORTED, "Removal of property is not supported.");
-    internal static WebDAVException PropertyOperationSuccessful() => new WebDAVException(HttpStatusCode.OK, ERROR_SUCCESS, null);
+    internal static WebDAVException PropertyOperationSuccessful() => new WebDAVException(HttpStatusCode.OK, ERROR_SUCCESS, string.Empty);
     internal static WebDAVException RequestDifferentStore(Uri uri) => new WebDAVException(HttpStatusCode.BadRequest, ERROR_NOT_SAME_DEVICE, $"The URI '{uri}' refers to a different Vivendi store.");
     internal static WebDAVException RequestHeaderInifiniteDepthNotSupported() => new WebDAVException(HttpStatusCode.Forbidden, ERROR_NOT_SUPPORTED, "Infinite depth requests are not supported.", "propfind-finite-depth");
     private static WebDAVException RequestHeaderInvalid(string message) => new WebDAVException(HttpStatusCode.BadRequest, ERROR_BAD_ARGUMENTS, message);
@@ -62,7 +64,7 @@ public sealed class WebDAVException : Exception
     internal static WebDAVException ResourceNotFound(Uri uri) => new WebDAVException(HttpStatusCode.NotFound, ERROR_FILE_NOT_FOUND, $"The resource '{uri}' has not been found.");
     internal static WebDAVException ResourceParentNotFound(Uri uri) => new WebDAVException(HttpStatusCode.Conflict, ERROR_PATH_NOT_FOUND, $"Not all parent directories of URI '{uri}' exist.");
 
-    private WebDAVException(HttpStatusCode statusCode, int errorCode, string message, string postConditionCode = null)
+    private WebDAVException(HttpStatusCode statusCode, int errorCode, string message, string? postConditionCode = null)
     : base(message)
     {
         StatusCode = (int)statusCode;
@@ -75,7 +77,7 @@ public sealed class WebDAVException : Exception
 
     public override string Message { get; }
 
-    public string PostConditionCode { get; }
+    public string? PostConditionCode { get; }
 
     public int StatusCode { get; }
 
