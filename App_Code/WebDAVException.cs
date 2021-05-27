@@ -81,12 +81,11 @@ public sealed class WebDAVException : Exception
 
     public int StatusCode { get; }
 
-    public override bool Equals(object obj) => obj != null &&
-                                               obj.GetType() == GetType() &&
-                                               ((WebDAVException)obj).ErrorCode == ErrorCode &&
-                                               ((WebDAVException)obj).Message == Message &&
-                                               ((WebDAVException)obj).PostConditionCode == PostConditionCode &&
-                                               ((WebDAVException)obj).StatusCode == StatusCode;
+    public override bool Equals(object obj) => obj is WebDAVException e &&
+                                               e.ErrorCode == ErrorCode &&
+                                               e.Message == Message &&
+                                               e.PostConditionCode == PostConditionCode &&
+                                               e.StatusCode == StatusCode;
 
     public override int GetHashCode() => ErrorCode.GetHashCode() ^ (Message?.GetHashCode() ?? 0) ^ (PostConditionCode?.GetHashCode() ?? 0) ^ StatusCode.GetHashCode();
 }

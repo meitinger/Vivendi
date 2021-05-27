@@ -234,8 +234,8 @@ public abstract class WebDAVPropHandler : WebDAVHandler
             LocalName = e.LocalName;
         }
 
-        public readonly string NamespaceURI;
         public readonly string LocalName;
+        public readonly string NamespaceURI;
     }
 
     private static readonly DateTime MaxDate = new DateTime(2107, 12, 31, 23, 59, 59, DateTimeKind.Utc);
@@ -248,15 +248,15 @@ public abstract class WebDAVPropHandler : WebDAVHandler
         // register all known properties
         Property<VivendiResource>.Register(DAV, "creationdate", (r, e) => e.InnerText = ToTimestamp(r.CreationDate), (r, e) => r.CreationDate = FromTimestamp(e.InnerText));
         Property<VivendiResource>.Register(DAV, "displayname", (r, e) => e.InnerText = r.DisplayName, (r, e) => r.DisplayName = e.InnerText);
-        Property<VivendiResource>.Register(DAV, "getlastmodified", (r, e) => e.InnerText = ToRTT(r.LastModified), (r, e) => r.LastModified = FromRTT(e.InnerText));
-        Property<VivendiResource>.Register(DAV, "resourcetype", (r, e) => { if (r is VivendiCollection) { e.AppendChild(e.OwnerDocument.CreateElement("collection", e.NamespaceURI)); } });
-        Property<VivendiResource>.Register(DAV, "ishidden", (r, e) => e.InnerText = (r.Attributes & FileAttributes.Hidden) == 0 ? "0" : "1");
-        Property<VivendiResource>.Register(MS, "Win32FileAttributes", (r, e) => e.InnerText = ToHex((int)r.Attributes), (r, e) => r.Attributes = (FileAttributes)FromHex(e.InnerText));
-        Property<VivendiResource>.Register(MS, "Win32CreationTime", (r, e) => e.InnerText = ToRTT(r.CreationDate), (r, e) => r.CreationDate = FromRTT(e.InnerText));
-        Property<VivendiResource>.Register(MS, "Win32LastAccessTime", (r, e) => e.InnerText = ToRTT(DateTime.Now));
-        Property<VivendiResource>.Register(MS, "Win32LastModifiedTime", (r, e) => e.InnerText = ToRTT(r.LastModified), (r, e) => r.LastModified = FromRTT(e.InnerText));
         Property<VivendiDocument>.Register(DAV, "getcontentlength", (d, e) => e.InnerText = d.Size.ToString(CultureInfo.InvariantCulture));
         Property<VivendiDocument>.Register(DAV, "getcontenttype", (d, e) => e.InnerText = d.ContentType);
+        Property<VivendiResource>.Register(DAV, "getlastmodified", (r, e) => e.InnerText = ToRTT(r.LastModified), (r, e) => r.LastModified = FromRTT(e.InnerText));
+        Property<VivendiResource>.Register(DAV, "ishidden", (r, e) => e.InnerText = (r.Attributes & FileAttributes.Hidden) == 0 ? "0" : "1");
+        Property<VivendiResource>.Register(DAV, "resourcetype", (r, e) => { if (r is VivendiCollection) { e.AppendChild(e.OwnerDocument.CreateElement("collection", e.NamespaceURI)); } });
+        Property<VivendiResource>.Register(MS, "Win32CreationTime", (r, e) => e.InnerText = ToRTT(r.CreationDate), (r, e) => r.CreationDate = FromRTT(e.InnerText));
+        Property<VivendiResource>.Register(MS, "Win32FileAttributes", (r, e) => e.InnerText = ToHex((int)r.Attributes), (r, e) => r.Attributes = (FileAttributes)FromHex(e.InnerText));
+        Property<VivendiResource>.Register(MS, "Win32LastAccessTime", (r, e) => e.InnerText = ToRTT(DateTime.Now));
+        Property<VivendiResource>.Register(MS, "Win32LastModifiedTime", (r, e) => e.InnerText = ToRTT(r.LastModified), (r, e) => r.LastModified = FromRTT(e.InnerText));
     }
 
     protected static int FromHex(string s) => int.TryParse(s, NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture, out var i) ? i : throw WebDAVException.PropertyInvalidHexNumber();
@@ -533,7 +533,6 @@ public sealed class WebDAVPropFindHandler : WebDAVPropHandler
     }
 }
 
-// HACK: PROPPATCH should be atomic, but this just goes beyond this project
 public sealed class WebDAVPropPatchHandler : WebDAVPropHandler
 {
     protected override HttpStatusCode ProcessRequestInternal(HttpContext context)

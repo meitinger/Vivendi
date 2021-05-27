@@ -20,7 +20,6 @@ using Aufbauwerk.Tools.Vivendi;
 using System;
 using System.Configuration;
 using System.Linq;
-using System.Security.Principal;
 using System.Text;
 using System.Web;
 
@@ -73,42 +72,52 @@ public static class WebDAVContextExtensions
         {
             return firstTryValue;
         }
+
+        // not found, create the value and try again, this time with a lock
+        var createdValue = variableCreator(context);
+        lock (session.SyncRoot)
         {
-            // not found, create the value and try again, this time with a lock
-            var createdValue = variableCreator(context);
-            lock (session.SyncRoot)
+            if (session[variableName] is T secondTryValue)
             {
-                if (session[variableName] is T secondTryValue)
-                {
-                    return secondTryValue;
-                }
-                // still not set so do it now
-                session[variableName] = createdValue;
-                return createdValue;
+                return secondTryValue;
             }
+
+            // still not set so do it now
+            session[variableName] = createdValue;
+            return createdValue;
         }
     }
 
-    private static Vivendi GetVivendi(HttpContext context) => GetSessionVariable(context, "Vivendi", c =>
+    private static VivendiCollection GetRoot(HttpContext context, string userName, bool nested) => GetSessionVariable(context, "Vivendi-" + userName, c =>
     {
-        // query all principal properties
-        var principal = c.User as WindowsPrincipal ?? throw new UnauthorizedAccessException();
-        var identity = principal.Identity as WindowsIdentity ?? throw new UnauthorizedAccessException();
-        var sid = identity.User ?? throw new UnauthorizedAccessException();
-        var userName = identity.Name ?? throw new UnauthorizedAccessException();
+        var connectionStrings = ((VivendiSource[])Enum.GetValues(typeof(VivendiSource))).ToDictionary(_ => _, v => ConfigurationManager.ConnectionStrings[v.ToString()].ConnectionString);
 
-        // create Vivendi (strip away the domain name from the user name)
-        var domainSep = userName.IndexOf('\\');
-        var vivendi = new Vivendi
-        (
-            userName: domainSep > -1 ? userName.Substring(domainSep + 1) : userName,
-            userSid: sid,
-            connectionStrings: ((VivendiSource[])Enum.GetValues(typeof(VivendiSource))).ToDictionary(_ => _, v => ConfigurationManager.ConnectionStrings[v.ToString()].ConnectionString)
-        );
+        VivendiCollection result;
+        Vivendi vivendi;
+        if (nested)
+        {
+            result = VivendiCollection.CreateStaticRoot();
+            vivendi = result.AddVivendi
+            (
+                name: userName,
+                userName: userName,
+                owner: context.Session.SessionID,
+                connectionStrings: connectionStrings
+            );
+        }
+        else
+        {
+            result = vivendi = Vivendi.CreateRoot
+            (
+                userName: userName,
+                owner: context.Session.SessionID,
+                connectionStrings: connectionStrings
+            );
+        }
         vivendi.AddBereiche();
         vivendi.AddKlienten().AddKlienten("(Alle Klienten)").ShowAll = true;
         vivendi.AddMitarbeiter().AddMitarbeiter("(Alle Mitarbeiter)").ShowAll = true;
-        return vivendi;
+        return result;
     });
 
     public static VivendiDocument? TryGetDocument(this HttpContext context, out VivendiCollection parentCollection, out string name) => TryGetDocumentInternal(context, context.Request.Url, out parentCollection, out name);
@@ -139,8 +148,18 @@ public static class WebDAVContextExtensions
 
     private static VivendiResource? TryGetResourceInternal(HttpContext context, Uri uri, out VivendiCollection parentCollection, out string name, out bool isCollection)
     {
+        // ensure authentication
+        if (!context.User.Identity.IsAuthenticated)
+        {
+            throw new UnauthorizedAccessException();
+        }
+        var userName = context.User.Identity.Name;
+        if (string.IsNullOrEmpty(userName))
+        {
+            throw new UnauthorizedAccessException();
+        }
+
         // ensure the URI refers to the same store
-        var vivendi = GetVivendi(context);
         var localPath = uri.LocalPath;
         var prefix = context.Request.ApplicationPath;
         if (!localPath.StartsWith(prefix, Vivendi.PathComparison) || (localPath = localPath.Substring(prefix.Length)).Length > 0 && localPath[0] != '/')
@@ -148,23 +167,40 @@ public static class WebDAVContextExtensions
             throw WebDAVException.RequestDifferentStore(uri);
         }
 
-        // check for empty name parts
+        // check for empty segments before splitting
         if (localPath.Contains("//"))
         {
             throw WebDAVException.RequestInvalidPath(uri);
         }
+        var segments = localPath.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+
+        // super users specify the real user in the first segment
+        var isSuperUser = ConfigurationManager.AppSettings.GetValues("SuperUser").Any(su => string.Equals(userName, su, StringComparison.OrdinalIgnoreCase));
+        if (isSuperUser)
+        {
+            if (segments.Length == 0) throw new UnauthorizedAccessException();
+            userName = segments[0];
+        }
+        else
+        {
+            // strip away the domain part if there is one
+            var domainSep = userName.IndexOf('\\');
+            if (domainSep > -1)
+            {
+                userName = userName.Substring(domainSep + 1);
+            }
+        }
 
         // traverse all parts starting at the root
-        var names = localPath.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
-        parentCollection = vivendi;
+        parentCollection = GetRoot(context, userName, isSuperUser);
         name = string.Empty;
         isCollection = localPath.Length > 0 && localPath[localPath.Length - 1] == '/';
-        var result = vivendi as VivendiResource;
-        for (var i = 0; i < names.Length; i++)
+        var result = parentCollection as VivendiResource;
+        foreach (var segment in segments)
         {
             // ensure that the parent is a collection and get the next child
             parentCollection = result as VivendiCollection ?? throw WebDAVException.ResourceParentNotFound(uri);
-            name = names[i];
+            name = segment;
             result = parentCollection.GetChild(name);
         }
 

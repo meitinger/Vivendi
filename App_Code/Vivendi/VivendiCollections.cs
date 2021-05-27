@@ -21,7 +21,6 @@ using System.Collections.Generic;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
-using System.Security.Principal;
 using System.Text;
 using static System.FormattableString;
 
@@ -30,6 +29,8 @@ namespace Aufbauwerk.Tools.Vivendi
     public abstract class VivendiCollection : VivendiResource
     {
         private const string DesktopIni = "desktop.ini";
+
+        public static VivendiCollection CreateStaticRoot(FileAttributes attributes = FileAttributes.Normal, string displayName = "") => new VivendiStaticCollection(null, displayName, attributes);
 
         private readonly DateTime? _creationDate;
         private readonly DateTime? _lastModified;
@@ -92,7 +93,7 @@ namespace Aufbauwerk.Tools.Vivendi
             get
             {
                 EnsureCanRead();
-                return _lastModified ?? _creationDate ?? Parent?.LastModified ?? DateTime.Now;
+                return _lastModified ?? Parent?.LastModified ?? CreationDate;
             }
             set => throw VivendiException.ResourcePropertyIsReadonly();
         }
@@ -220,11 +221,18 @@ GROUP BY
 "
         ));
 
-        public Vivendi AddNestedVivendi(string name, string userName, SecurityIdentifier userSid, IDictionary<VivendiSource, string> connectionStrings) => Add(new Vivendi(this, name, userName, userSid, connectionStrings));
-
         public VivendiCollection AddStaticCollection(string name, FileAttributes attributes = FileAttributes.Normal) => Add(new VivendiStaticCollection(this, name, attributes));
 
         public VivendiDocument AddStaticDocument(string name, byte[] data, FileAttributes attributes = FileAttributes.Normal) => Add(new VivendiStaticDocument(this, name, attributes, data));
+
+        public Vivendi AddVivendi(string name, string userName, string owner, IDictionary<VivendiSource, string> connectionStrings) => Add(new Vivendi
+        (
+            parent: this,
+            name: name,
+            userName: userName,
+            owner: owner,
+            connectionStrings: connectionStrings
+        ));
 
         private VivendiDocument BuildDesktopIni(IDictionary<string, string> localizedNames)
         {
@@ -285,9 +293,9 @@ GROUP BY
             return resource != null && resource.InCollection && string.Equals(name, resource.Name, Vivendi.PathComparison) ? resource : null;
         }
 
-        protected virtual VivendiResource? GetChildByName(string name) => null;
-
         protected virtual VivendiResource? GetChildByID(VivendiResourceType type, int id) => null;
+
+        protected virtual VivendiResource? GetChildByName(string name) => null;
 
         protected virtual IEnumerable<VivendiResource> GetChildren() => Enumerable.Empty<VivendiResource>();
 
@@ -299,28 +307,20 @@ GROUP BY
         private readonly FileAttributes _attributes;
         private readonly DateTime _buildTime;
 
-        internal VivendiStaticCollection(VivendiCollection parent, string name, FileAttributes attributes)
-        : base(parent, VivendiResourceType.Named, 0, name)
+        internal VivendiStaticCollection(VivendiCollection? parent, string name, FileAttributes attributes)
+        : base(parent, parent == null ? VivendiResourceType.Root : VivendiResourceType.Named, 0, name)
         {
+            _attributes = FileAttributes.ReadOnly | FileAttributes.Directory | (attributes & ~FileAttributes.Normal);
             _buildTime = DateTime.Now;
-            _attributes = FileAttributes.ReadOnly | FileAttributes.System | FileAttributes.Directory | (attributes & ~FileAttributes.Normal);
         }
 
         public override FileAttributes Attributes => _attributes;
 
-        public override DateTime CreationDate
-        {
-            get => _buildTime;
-            set => throw VivendiException.ResourceIsStatic();
-        }
+        public override DateTime CreationDate => _buildTime;
 
         internal override bool InCollection => true;
 
-        public override DateTime LastModified
-        {
-            get => _buildTime;
-            set => throw VivendiException.ResourceIsStatic();
-        }
+        public override DateTime LastModified => _buildTime;
     }
 
     internal sealed class VivendiObjectInstanceCollection : VivendiCollection
@@ -349,7 +349,6 @@ GROUP BY
         {
             ObjectType = type;
             _allowInheritedAccess = allowInheritedAccess;
-            _protocolType = protocolType;
             if (nullInstanceName != null)
             {
                 _nullInstance = new VivendiObjectInstanceCollection
@@ -362,6 +361,7 @@ GROUP BY
                     sections: null
                 );
             }
+            _protocolType = protocolType;
             var middlePart = Invariant($@" FROM [dbo].[PROTOKOLL] WHERE [ZielTabelle] = {protocolType} AND [ZielIndex] = {queryId} AND [Vorgang] = ");
             _query = Invariant($@"SELECT
     (SELECT [Systemzeit]{middlePart}0) AS [CreationDate],
@@ -386,6 +386,19 @@ GROUP BY
                 return QueryProtocol("MAX", 1) ?? base.LastModified;
             }
             set => throw VivendiException.ResourcePropertyIsReadonly();
+        }
+
+        protected override VivendiResource? GetChildByID(VivendiResourceType type, int id) => type == VivendiResourceType.ObjectInstanceCollection ? id == 0 ? _nullInstance : Query(id).SingleOrDefault() : null;
+
+        protected override IEnumerable<VivendiResource> GetChildren()
+        {
+            // fetch all objects of this collection's type and optionally append the any instance
+            var children = Query(DBNull.Value);
+            if (_nullInstance != null)
+            {
+                children = children.Append(_nullInstance);
+            }
+            return children;
         }
 
         private IEnumerable<VivendiObjectInstanceCollection> Query(object id)
@@ -414,19 +427,6 @@ GROUP BY
         {
             var dt = Vivendi.ExecuteScalar(VivendiSource.Data, Invariant($@"SELECT {aggregate}([Systemzeit]) FROM [dbo].[PROTOKOLL] WHERE [ZielTabelle] = {_protocolType} AND [Vorgang] = {operation}"));
             return dt != DBNull.Value ? (DateTime?)dt : null;
-        }
-
-        protected override VivendiResource? GetChildByID(VivendiResourceType type, int id) => type == VivendiResourceType.ObjectInstanceCollection ? id == 0 ? _nullInstance : Query(id).SingleOrDefault() : null;
-
-        protected override IEnumerable<VivendiResource> GetChildren()
-        {
-            // fetch all objects of this collection's type and optionally append the any instance
-            var children = Query(DBNull.Value);
-            if (_nullInstance != null)
-            {
-                children = children.Append(_nullInstance);
-            }
-            return children;
         }
     }
 
@@ -535,14 +535,14 @@ WHERE
 
         public bool RetainRevisions { get; }
 
-        protected override VivendiResource? GetChildByName(string name) => VivendiStoreDocument.QueryByName(this, name);
-
         protected override VivendiResource? GetChildByID(VivendiResourceType type, int id) => type switch
         {
             VivendiResourceType.StoreDocument => VivendiStoreDocument.QueryByID(this, id),
             VivendiResourceType.StoreCollection => VivendiStoreCollection.QueryOne(this, id),
             _ => null,
         };
+
+        protected override VivendiResource? GetChildByName(string name) => VivendiStoreDocument.QueryByName(this, name);
 
         protected override IEnumerable<VivendiResource> GetChildren() => Enumerable.Empty<VivendiResource>().Concat(VivendiStoreDocument.QueryAll(this)).Concat(VivendiStoreCollection.QueryAll(this));
 

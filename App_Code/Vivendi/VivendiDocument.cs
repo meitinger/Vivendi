@@ -22,7 +22,6 @@ using System.Data;
 using System.Data.SqlClient;
 using System.IO;
 using System.Linq;
-using System.Security.Principal;
 using System.Web;
 
 namespace Aufbauwerk.Tools.Vivendi
@@ -63,19 +62,19 @@ namespace Aufbauwerk.Tools.Vivendi
         public override DateTime CreationDate
         {
             get => _buildTime;
-            set => throw VivendiException.ResourceIsStatic();
+            set => throw VivendiException.ResourcePropertyIsReadonly();
         }
 
         public override byte[] Data
         {
             get => _data;
-            set => throw VivendiException.ResourceIsStatic();
+            set => throw VivendiException.ResourcePropertyIsReadonly();
         }
 
         public override string DisplayName
         {
             get => Name;
-            set => throw VivendiException.ResourceIsStatic();
+            set => throw VivendiException.ResourcePropertyIsReadonly();
         }
 
         internal override bool InCollection => true;
@@ -83,7 +82,7 @@ namespace Aufbauwerk.Tools.Vivendi
         public override DateTime LastModified
         {
             get => _buildTime;
-            set => throw VivendiException.ResourceIsStatic();
+            set => throw VivendiException.ResourcePropertyIsReadonly();
         }
 
         public override int Size => _data.Length;
@@ -144,7 +143,7 @@ VALUES
 
         private struct Template
         {
-            public Template(VivendiStoreCollection parent, int id, bool additionalTargets, int? section, SecurityIdentifier? owner, string displayName, DateTime creationDate, DateTime lastModified, int size, DateTime? lockDate, bool signed)
+            public Template(VivendiStoreCollection parent, int id, bool additionalTargets, int? section, string? owner, string displayName, DateTime creationDate, DateTime lastModified, int size, DateTime? lockDate, bool signed)
             {
                 // initialize the template
                 Parent = parent;
@@ -164,7 +163,7 @@ VALUES
             public readonly int ID;
             public readonly bool AdditionalTargets;
             public readonly int? Section;
-            public readonly SecurityIdentifier? Owner;
+            public readonly string? Owner;
             public readonly string DisplayName;
             public readonly DateTime CreationDate;
             public readonly DateTime LastModified;
@@ -178,7 +177,7 @@ VALUES
             EnsureValidName(ref name);
             parent.EnsureCanWrite();
             EnsureSize(parent.MaxDocumentSize, data.Length);
-            var owner = parent.Vivendi.UserSid;
+            var owner = parent.Vivendi.Owner;
             var lockDate = !parent.LockAfterMonths.HasValue ? (DateTime?)null : DateTime.Now.Date.AddMonths(parent.LockAfterMonths.Value);
             var id = new SqlParameter("ID", SqlDbType.Int) { Direction = ParameterDirection.Output };
             const string command =
@@ -293,9 +292,9 @@ VALUES
             }
         }
 
-        private static string FormatOwner(SecurityIdentifier owner) => WebDAVPrefix + owner;
+        private static string FormatOwner(string owner) => WebDAVPrefix + owner;
 
-        private static IEnumerable<VivendiStoreDocument> FromTemplatesWithSameName(IEnumerable<Template> templates, SecurityIdentifier owner, bool allowTyped)
+        private static IEnumerable<VivendiStoreDocument> FromTemplatesWithSameName(IEnumerable<Template> templates, string owner, bool allowTyped)
         {
             using var enumerator = templates.GetEnumerator();
 
@@ -367,16 +366,14 @@ VALUES
             yield return new VivendiStoreDocument(true, template);
         }
 
-        private static SecurityIdentifier? ParseOwner(string location)
+        private static string? ParseOwner(string location)
         {
             // check the prefix and parse the SID
             if (!location.StartsWith(WebDAVPrefix, StringComparison.OrdinalIgnoreCase))
             {
                 return null;
             }
-            var sddl = location.Substring(WebDAVPrefix.Length);
-            try { return new SecurityIdentifier(sddl); }
-            catch (ArgumentException) { return null; }
+            return location.Substring(WebDAVPrefix.Length);
         }
 
         private static IEnumerable<Template> Query(VivendiStoreCollection parent, object id)
@@ -432,7 +429,7 @@ WHERE
         internal static IEnumerable<VivendiStoreDocument> QueryAll(VivendiStoreCollection parent)
         {
             // cache the owner and return all documents
-            var owner = parent.Vivendi.UserSid;
+            var owner = parent.Vivendi.Owner;
             return Query(parent, DBNull.Value)
                 .ToLookup(t => t.DisplayName, Vivendi.PathComparer)
                 .SelectMany
@@ -446,7 +443,7 @@ WHERE
 
         internal static VivendiStoreDocument QueryByID(VivendiStoreCollection parent, int id) => Query(parent, id).Select(t => new VivendiStoreDocument(false, t)).SingleOrDefault();
 
-        internal static VivendiStoreDocument QueryByName(VivendiStoreCollection parent, string name) => FromTemplatesWithSameName(Query(parent, DBNull.Value).Where(t => string.Equals(t.DisplayName, name, Vivendi.PathComparison)), parent.Vivendi.UserSid, false).SingleOrDefault();
+        internal static VivendiStoreDocument QueryByName(VivendiStoreCollection parent, string name) => FromTemplatesWithSameName(Query(parent, DBNull.Value).Where(t => string.Equals(t.DisplayName, name, Vivendi.PathComparison)), parent.Vivendi.Owner, false).SingleOrDefault();
 
         private readonly bool _additionalTargets;
         private DateTime _creationDate;
