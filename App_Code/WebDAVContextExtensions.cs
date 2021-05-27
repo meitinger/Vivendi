@@ -101,18 +101,12 @@ public static class WebDAVContextExtensions
             (
                 name: userName,
                 userName: userName,
-                owner: context.Session.SessionID,
                 connectionStrings: connectionStrings
             );
         }
         else
         {
-            result = vivendi = Vivendi.CreateRoot
-            (
-                userName: userName,
-                owner: context.Session.SessionID,
-                connectionStrings: connectionStrings
-            );
+            result = vivendi = Vivendi.CreateRoot(userName, connectionStrings);
         }
         vivendi.AddBereiche();
         vivendi.AddKlienten().AddKlienten("(Alle Klienten)").ShowAll = true;
@@ -175,24 +169,26 @@ public static class WebDAVContextExtensions
         var segments = localPath.Split(new char[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
 
         // super users specify the real user in the first segment
-        var isSuperUser = ConfigurationManager.AppSettings.GetValues("SuperUser").Any(su => string.Equals(userName, su, StringComparison.OrdinalIgnoreCase));
-        if (isSuperUser)
+        if (ConfigurationManager.AppSettings.GetValues("SuperUser")?.Any(su => string.Equals(userName, su, StringComparison.OrdinalIgnoreCase)) ?? false)
         {
-            if (segments.Length == 0) throw new UnauthorizedAccessException();
-            userName = segments[0];
+            if (segments.Length == 0)
+            {
+                // the Windows Redirector does not like it if there is no root
+                parentCollection = VivendiCollection.CreateStaticRoot();
+            }
+            else
+            {
+                parentCollection = GetRoot(context, segments[0], true);
+            }
         }
         else
         {
             // strip away the domain part if there is one
             var domainSep = userName.IndexOf('\\');
-            if (domainSep > -1)
-            {
-                userName = userName.Substring(domainSep + 1);
-            }
+            parentCollection = GetRoot(context, domainSep > -1 ? userName.Substring(domainSep + 1) : userName, false);
         }
 
         // traverse all parts starting at the root
-        parentCollection = GetRoot(context, userName, isSuperUser);
         name = string.Empty;
         isCollection = localPath.Length > 0 && localPath[localPath.Length - 1] == '/';
         var result = parentCollection as VivendiResource;

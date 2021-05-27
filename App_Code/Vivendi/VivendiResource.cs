@@ -28,8 +28,6 @@ namespace Aufbauwerk.Tools.Vivendi
 {
     public enum VivendiResourceType
     {
-        Named = -1,
-        Root = 0,
         StoreCollection = 2,
         StoreDocument = 1,
         ObjectInstanceCollection = 3,
@@ -50,6 +48,7 @@ namespace Aufbauwerk.Tools.Vivendi
             public readonly string Name;
         }
 
+        private const string NamePrefix = "DavWWW";
         private static readonly char[] InvalidNameChars = new char[] { '"', '<', '>', '|', '\0', '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\a', '\b', '\t', '\n', '\v', '\f', '\r', '\u000e', '\u000f', '\u0010', '\u0011', '\u0012', '\u0013', '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001a', '\u001b', '\u001c', '\u001d', '\u001e', '\u001f', ':', '*', '?', '\\', '/' };
 
         internal static bool IsValidName(string name) => name.IndexOfAny(InvalidNameChars) == -1;
@@ -59,26 +58,22 @@ namespace Aufbauwerk.Tools.Vivendi
             // remove the extension and parse the remaining name
             var dot = name.LastIndexOf('.');
             var typeAndId = (dot > -1 ? name.Substring(0, dot) : name).Split('-');
-            if (typeAndId.Length == 2 && int.TryParse(typeAndId[0], NumberStyles.None, CultureInfo.InvariantCulture, out var typeNumeric) && int.TryParse(typeAndId[1], NumberStyles.None, CultureInfo.InvariantCulture, out id))
+            if (typeAndId.Length == 3 && typeAndId[0] == NamePrefix && int.TryParse(typeAndId[1], NumberStyles.None, CultureInfo.InvariantCulture, out var typeNumeric) && int.TryParse(typeAndId[2], NumberStyles.None, CultureInfo.InvariantCulture, out id))
             {
                 type = (VivendiResourceType)typeNumeric;
                 return true;
             }
             else
             {
-                type = VivendiResourceType.Named;
+                type = 0;
                 id = -1;
                 return false;
             }
         }
 
-        private ObjectInstance? _objectInstance;
-        private int? _objectType;
-        private ISet<int>? _sections;
-
-        internal VivendiResource(VivendiCollection? parent, VivendiResourceType type, int id, string name)
+        internal static string FormatTypeAndId(VivendiResourceType type, int id, string extension = "")
         {
-            // check the arguments
+            // ensure the arguments are valid before formatting them
             if (!Enum.IsDefined(typeof(VivendiResourceType), type))
             {
                 throw new InvalidEnumArgumentException(nameof(type), (int)type, typeof(VivendiResourceType));
@@ -87,40 +82,28 @@ namespace Aufbauwerk.Tools.Vivendi
             {
                 throw new ArgumentOutOfRangeException(nameof(id), "Resource IDs must be non-negative.");
             }
-            if (type == VivendiResourceType.Root ^ parent == null)
+            return Invariant($"{NamePrefix}-{(int)type}-{id}{extension}");
+        }
+
+        private ObjectInstance? _objectInstance;
+        private int? _objectType;
+        private ISet<int>? _sections;
+
+        internal VivendiResource(VivendiCollection? parent, string name, string? localizedName = null)
+        {
+            // the name must be empty iff the resource is a root
+            if (name.Length == 0 ^ parent == null)
             {
-                throw new ArgumentException("Invalid type and parent combination.");
+                throw new ArgumentException("Invalid name and parent combination.");
+            }
+            if (!IsValidName(name))
+            {
+                throw new ArgumentOutOfRangeException(nameof(name), "Name contains invalid characters.");
             }
 
-            // set the non-computed values
             Parent = parent;
-            Type = type;
-            ID = id;
-
-            // get the extension and set the localized name
-            LocalizedName = name;
-            var extension = string.Empty;
-            if (!(this is VivendiCollection))
-            {
-                var dot = name.LastIndexOf('.');
-                if (dot > -1)
-                {
-                    var extensionTest = name.Substring(dot);
-                    if (extensionTest.IndexOfAny(InvalidNameChars) == -1)
-                    {
-                        extension = extensionTest;
-                        LocalizedName = name.Substring(0, dot);
-                    }
-                }
-            }
-
-            // set the name property based on the type
-            Name = type switch
-            {
-                VivendiResourceType.Root => string.Empty,
-                VivendiResourceType.Named => name,
-                _ => Invariant($"{(int)type}-{id}{extension}"),
-            };
+            Name = name;
+            LocalizedName = localizedName ?? name;
         }
 
         public virtual FileAttributes Attributes
@@ -147,13 +130,11 @@ namespace Aufbauwerk.Tools.Vivendi
 
         protected internal bool HasObjectType => ObjectTypeOrNull.HasValue;
 
-        internal int ID { get; }
-
         internal virtual bool InCollection => CheckRead(true);
 
         public abstract DateTime LastModified { get; set; }
 
-        internal string LocalizedName { get; }
+        protected internal string? LocalizedName { get; protected set; }
 
         public string Name { get; }
 
@@ -169,7 +150,7 @@ namespace Aufbauwerk.Tools.Vivendi
 
         private int? ObjectTypeOrNull => SelfAndAncestors.FirstOrDefault(r => r._objectType.HasValue)?._objectType;
 
-        public string Path => Type == VivendiResourceType.Root ? "/" : string.Join("/", SelfAndAncestors.Reverse().Select(r => r.Name));
+        public string Path => Parent == null ? "/" : string.Join("/", SelfAndAncestors.Reverse().Select(r => r.Name));
 
         public VivendiCollection? Parent { get; }
 
@@ -201,9 +182,9 @@ namespace Aufbauwerk.Tools.Vivendi
             }
         }
 
-        public VivendiResourceType Type { get; }
+        public Vivendi Vivendi => VivendiOrNull ?? throw new InvalidOperationException("No ancestral Vivendi instance.");
 
-        public Vivendi Vivendi => SelfAndAncestors.OfType<Vivendi>().First();
+        private Vivendi? VivendiOrNull => SelfAndAncestors.OfType<Vivendi>().FirstOrDefault();
 
         private bool CheckPermission(Func<IEnumerable<int>?, int> getAccessLevel, Func<int, IEnumerable<int>> getSections, bool dontThrow)
         {
@@ -227,9 +208,9 @@ namespace Aufbauwerk.Tools.Vivendi
             return true;
         }
 
-        private bool CheckRead(bool dontThrow) => CheckPermission(Vivendi.GetReadAccessLevel, Vivendi.GetReadableSections, dontThrow);
+        private bool CheckRead(bool dontThrow) => VivendiOrNull == null || CheckPermission(Vivendi.GetReadAccessLevel, Vivendi.GetReadableSections, dontThrow);
 
-        private bool CheckWrite(bool dontThrow) => CheckPermission(Vivendi.GetWriteAccessLevel, Vivendi.GetWritableSections, dontThrow);
+        private bool CheckWrite(bool dontThrow) => VivendiOrNull != null && CheckPermission(Vivendi.GetWriteAccessLevel, Vivendi.GetWritableSections, dontThrow);
 
         internal virtual bool EnsureCanRead() => CheckRead(false);
 

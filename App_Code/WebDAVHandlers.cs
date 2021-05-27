@@ -134,10 +134,11 @@ public abstract class WebDAVCopyAndMoveHandler : WebDAVHandler
             destination.Delete();
         }
 
-        // if the destination name is the type/id name of the source use the display name instead
-        if (source.Type != VivendiResourceType.Named && string.Equals(source.Name, destinationName, Vivendi.PathComparison))
+        // do the best to copy and move files with the localized name intact
+        var template = destination ?? source;
+        if (template.LocalizedName != null)
         {
-            destinationName = source.DisplayName;
+            destinationName = destinationName.Replace(template.NameWithoutExtension, template.LocalizedName);
         }
 
         // copy or move the source document to the destination

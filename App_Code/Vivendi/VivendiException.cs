@@ -26,12 +26,14 @@ namespace Aufbauwerk.Tools.Vivendi
     {
         private const int ERROR_ACCESS_DENIED = 5;
         private const int ERROR_BAD_PATHNAME = 161;
+        private const int ERROR_FILE_EXISTS = 80;
         private const int ERROR_FILE_TOO_LARGE = 223;
         private const int ERROR_FILENAME_EXCED_RANGE = 206;
         private const int ERROR_LOCK_VIOLATION = 33;
         private const int ERROR_NOT_SUPPORTED = 50;
         private const int FACILITY_WIN32 = 7;
 
+        internal static VivendiException DocumentAlreadyExists() => new VivendiException(ERROR_FILE_EXISTS, $"Another document with the same name already exists.");
         internal static VivendiException DocumentContainsAdditionalLinks() => new VivendiException("The document contains additional links and should therefore only be modified within Vivendi.");
         internal static VivendiException DocumentHasRevisions() => new VivendiException("The document has revisions that cannot be deleted or moved.");
         internal static VivendiException DocumentIsLocked(DateTime lockDate) => new VivendiException(ERROR_LOCK_VIOLATION, $"The document has been locked since {lockDate}.");
@@ -47,7 +49,8 @@ namespace Aufbauwerk.Tools.Vivendi
 
         private VivendiException(string message)
         : this(ERROR_ACCESS_DENIED, message)
-        { }
+        {
+        }
 
         private VivendiException(int errorCode, string message)
         : base(message)

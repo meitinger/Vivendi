@@ -36,14 +36,7 @@ namespace Aufbauwerk.Tools.Vivendi
         public static readonly StringComparer PathComparer = StringComparer.OrdinalIgnoreCase;
         public static readonly StringComparison PathComparison = StringComparison.OrdinalIgnoreCase;
 
-        public static Vivendi CreateRoot(string userName, string owner, IDictionary<VivendiSource, string> connectionStrings, string displayName = "(Hauptgruppe)") => new Vivendi
-        (
-            parent: null,
-            name: displayName,
-            userName: userName,
-            owner: owner,
-            connectionStrings: connectionStrings
-        );
+        public static Vivendi CreateRoot(string userName, IDictionary<VivendiSource, string> connectionStrings, string displayName = "(Hauptgruppe)") => new Vivendi(null, string.Empty, userName, connectionStrings, displayName);
 
         private readonly IDictionary<VivendiSource, string> _connectionStrings;
         private short _maxReadAccessLevel;
@@ -54,19 +47,22 @@ namespace Aufbauwerk.Tools.Vivendi
         private readonly IDictionary<int, ISet<int>> _writableSectionsByObjectType = new Dictionary<int, ISet<int>>();
         private readonly IDictionary<int, short> _writeAccessLevels = new Dictionary<int, short>();
 
-        internal Vivendi(VivendiCollection? parent, string name, string userName, string owner, IDictionary<VivendiSource, string> connectionStrings)
-        : base(parent, parent == null ? VivendiResourceType.Root : VivendiResourceType.Named, 0, name, creationDate: DateTime.Now)
+        internal Vivendi(VivendiCollection? parent, string name, string userName, IDictionary<VivendiSource, string> connectionStrings, string? displayName = null)
+        : base
+        (
+              parent: parent,
+              name: name,
+              creationDate: DateTime.Now,
+              localizedName: displayName
+        )
         {
             // set all properties
             UserName = userName;
-            Owner = owner;
             _connectionStrings = connectionStrings;
 
             // query the permissions
             InitializePermissions();
         }
-
-        public string Owner { get; }
 
         public string UserName { get; }
 

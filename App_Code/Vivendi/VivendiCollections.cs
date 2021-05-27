@@ -30,16 +30,23 @@ namespace Aufbauwerk.Tools.Vivendi
     {
         private const string DesktopIni = "desktop.ini";
 
+        private static void AddToDesktopIniList(VivendiResource child, IDictionary<string, string> children)
+        {
+            if (!(child is VivendiCollection) && child.LocalizedName != null)
+            {
+                children.Add(child.Name, child.LocalizedName);
+            }
+        }
+
         public static VivendiCollection CreateStaticRoot(FileAttributes attributes = FileAttributes.Normal, string displayName = "") => new VivendiStaticCollection(null, displayName, attributes);
 
         private readonly DateTime? _creationDate;
         private readonly DateTime? _lastModified;
-        private readonly IDictionary<string, VivendiResource> _namedResources = new Dictionary<string, VivendiResource>(Vivendi.PathComparer);
+        private readonly IDictionary<string, VivendiResource> _resources = new Dictionary<string, VivendiResource>(Vivendi.PathComparer);
         private bool _showAll = false;
-        private readonly IDictionary<VivendiResourceType, IDictionary<int, VivendiResource>> _typedResources = new Dictionary<VivendiResourceType, IDictionary<int, VivendiResource>>();
 
-        internal VivendiCollection(VivendiCollection? parent, VivendiResourceType type, int id, string name, DateTime? creationDate = null, DateTime? lastModified = null)
-        : base(parent, type, id, name)
+        internal VivendiCollection(VivendiCollection? parent, string name, DateTime? creationDate = null, DateTime? lastModified = null, string? localizedName = null)
+        : base(parent, name, localizedName)
         {
             _creationDate = creationDate;
             _lastModified = lastModified;
@@ -57,16 +64,13 @@ namespace Aufbauwerk.Tools.Vivendi
                 foreach (var child in ChildrenWithoutDesktopIni)
                 {
                     yield return child;
-                    if (child.Type != VivendiResourceType.Named && !(child is VivendiCollection))
-                    {
-                        children.Add(child.Name, child.LocalizedName);
-                    }
+                    AddToDesktopIniList(child, children);
                 }
                 yield return BuildDesktopIni(children);
             }
         }
 
-        private IEnumerable<VivendiResource> ChildrenWithoutDesktopIni => _namedResources.Values.Concat(_typedResources.Values.SelectMany(d => d.Values)).Concat(GetChildren()).Where(r => r.InCollection);
+        private IEnumerable<VivendiResource> ChildrenWithoutDesktopIni => _resources.Values.Concat(GetChildren()).Where(r => r.InCollection);
 
         public override DateTime CreationDate
         {
@@ -83,7 +87,7 @@ namespace Aufbauwerk.Tools.Vivendi
             get
             {
                 EnsureCanRead();
-                return LocalizedName;
+                return LocalizedName ?? Name;
             }
             set => throw VivendiException.ResourcePropertyIsReadonly();
         }
@@ -107,18 +111,8 @@ namespace Aufbauwerk.Tools.Vivendi
         private T Add<T>(T resource) where T : VivendiResource
         {
             // add and return the resource
-            if (resource.Type == VivendiResourceType.Named)
-            {
-                _namedResources.Add(resource.Name, resource);
-            }
-            else
-            {
-                if (!_typedResources.TryGetValue(resource.Type, out var idResources))
-                {
-                    _typedResources.Add(resource.Type, idResources = new Dictionary<int, VivendiResource>());
-                }
-                idResources.Add(resource.ID, resource);
-            }
+            _resources.Add(resource.Name, resource);
+
             return resource;
         }
 
@@ -126,7 +120,7 @@ namespace Aufbauwerk.Tools.Vivendi
         (
             parent: this,
             type: 4,
-            name: name,
+            displayName: name,
             nullInstanceName: nullInstanceName,
             allowInheritedAccess: true,
             protocolType: 0,
@@ -148,7 +142,7 @@ WHERE
         (
             parent: this,
             type: 1,
-            name: name,
+            displayName: name,
             protocolType: 3,
             queryId: @"[dbo].[PFLEGEBED].[Z_PF]",
             queryWithoutSelect:
@@ -186,7 +180,7 @@ GROUP BY
         (
             parent: this,
             type: 0,
-            name: name,
+            displayName: name,
             allowInheritedAccess: true,
             protocolType: 1,
             queryId: @"[dbo].[MITARBEITER].[Z_MI]",
@@ -225,14 +219,7 @@ GROUP BY
 
         public VivendiDocument AddStaticDocument(string name, byte[] data, FileAttributes attributes = FileAttributes.Normal) => Add(new VivendiStaticDocument(this, name, attributes, data));
 
-        public Vivendi AddVivendi(string name, string userName, string owner, IDictionary<VivendiSource, string> connectionStrings) => Add(new Vivendi
-        (
-            parent: this,
-            name: name,
-            userName: userName,
-            owner: owner,
-            connectionStrings: connectionStrings
-        ));
+        public Vivendi AddVivendi(string name, string userName, IDictionary<VivendiSource, string> connectionStrings) => Add(new Vivendi(this, name, userName, connectionStrings));
 
         private VivendiDocument BuildDesktopIni(IDictionary<string, string> localizedNames)
         {
@@ -245,7 +232,7 @@ GROUP BY
             }
 
             // translate the collection itself and return the document
-            if (Type != VivendiResourceType.Named)
+            if (LocalizedName != null)
             {
                 builder.Append("[.ShellClassInfo]").AppendLine();
                 builder.Append("LocalizedResourceName=").Append(LocalizedName).AppendLine();
@@ -267,30 +254,35 @@ GROUP BY
             // handle the desktop.ini first
             if (string.Equals(name, DesktopIni, Vivendi.PathComparison))
             {
-                return BuildDesktopIni(ChildrenWithoutDesktopIni.Where(c => c.Type != VivendiResourceType.Named && !(c is VivendiCollection)).ToDictionary(r => r.Name, r => r.LocalizedName));
+                var children = new Dictionary<string, string>();
+                foreach (var child in ChildrenWithoutDesktopIni)
+                {
+                    AddToDesktopIniList(child, children);
+                }
+                return BuildDesktopIni(children);
             }
 
-            // check what type of path we have got
-            VivendiResource? resource;
-            if (TryParseTypeAndID(name, out var type, out var id))
+            // try to locate the resource
+            if (!_resources.TryGetValue(name, out var resource))
             {
-                // find typed resources
-                if (!_typedResources.TryGetValue(type, out var idResources) || !idResources.TryGetValue(id, out resource))
+                if (TryParseTypeAndID(name, out var type, out var id))
                 {
                     resource = GetChildByID(type, id);
+
+                    // ensure the resource has the same extension
+                    if (resource != null && !string.Equals(name, resource.Name, Vivendi.PathComparison))
+                    {
+                        resource = null;
+                    }
                 }
-            }
-            else
-            {
-                // find named resources
-                if (!_namedResources.TryGetValue(name, out resource))
+                else
                 {
                     resource = GetChildByName(name);
                 }
             }
 
-            // ensure the resource is in the collection and has the same extension
-            return resource != null && resource.InCollection && string.Equals(name, resource.Name, Vivendi.PathComparison) ? resource : null;
+            // ensure the resource is in the collection
+            return resource?.InCollection ?? false ? resource : null;
         }
 
         protected virtual VivendiResource? GetChildByID(VivendiResourceType type, int id) => null;
@@ -308,7 +300,7 @@ GROUP BY
         private readonly DateTime _buildTime;
 
         internal VivendiStaticCollection(VivendiCollection? parent, string name, FileAttributes attributes)
-        : base(parent, parent == null ? VivendiResourceType.Root : VivendiResourceType.Named, 0, name)
+        : base(parent, name)
         {
             _attributes = FileAttributes.ReadOnly | FileAttributes.Directory | (attributes & ~FileAttributes.Normal);
             _buildTime = DateTime.Now;
@@ -325,10 +317,17 @@ GROUP BY
 
     internal sealed class VivendiObjectInstanceCollection : VivendiCollection
     {
-        internal VivendiObjectInstanceCollection(VivendiCollection parent, int? id, string name, DateTime? creationDate, DateTime? lastModified, IEnumerable<int>? sections)
-        : base(parent, VivendiResourceType.ObjectInstanceCollection, id ?? 0, name, creationDate, lastModified)
+        internal VivendiObjectInstanceCollection(VivendiCollection parent, int? id, string displayName, DateTime? creationDate, DateTime? lastModified, IEnumerable<int>? sections)
+        : base
+        (
+              parent: parent,
+              name: FormatTypeAndId(VivendiResourceType.ObjectInstanceCollection, id ?? 0),
+              creationDate: creationDate,
+              lastModified: lastModified,
+              localizedName: displayName
+        )
         {
-            SetObjectInstance(id, name);
+            SetObjectInstance(id, displayName);
             Sections = sections;
         }
 
@@ -344,8 +343,13 @@ GROUP BY
         private readonly int _protocolType;
         private readonly string _query;
 
-        internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string name, int protocolType, string queryId, string queryWithoutSelect, bool allowInheritedAccess = true, string? nullInstanceName = null)
-        : base(parent, VivendiResourceType.ObjectTypeCollection, type, name)
+        internal VivendiObjectTypeCollection(VivendiCollection parent, int type, string displayName, int protocolType, string queryId, string queryWithoutSelect, bool allowInheritedAccess = true, string? nullInstanceName = null)
+        : base
+        (
+              parent: parent,
+              name: FormatTypeAndId(VivendiResourceType.ObjectTypeCollection, type),
+              localizedName: displayName
+        )
         {
             ObjectType = type;
             _allowInheritedAccess = allowInheritedAccess;
@@ -355,7 +359,7 @@ GROUP BY
                 (
                     parent: this,
                     id: null,
-                    name: nullInstanceName,
+                    displayName: nullInstanceName,
                     creationDate: null,
                     lastModified: null,
                     sections: null
@@ -363,9 +367,14 @@ GROUP BY
             }
             _protocolType = protocolType;
             var middlePart = Invariant($@" FROM [dbo].[PROTOKOLL] WHERE [ZielTabelle] = {protocolType} AND [ZielIndex] = {queryId} AND [Vorgang] = ");
-            _query = Invariant($@"SELECT
+            _query = Invariant
+            (
+$@"
+SELECT
     (SELECT [Systemzeit]{middlePart}0) AS [CreationDate],
-    (SELECT MAX([Systemzeit]){middlePart}1) AS [LastModified],{queryWithoutSelect}");
+    (SELECT MAX([Systemzeit]){middlePart}1) AS [LastModified],{queryWithoutSelect}
+"
+            );
         }
 
         public override DateTime CreationDate
@@ -393,7 +402,7 @@ GROUP BY
         protected override IEnumerable<VivendiResource> GetChildren()
         {
             // fetch all objects of this collection's type and optionally append the any instance
-            var children = Query(DBNull.Value);
+            var children = Query();
             if (_nullInstance != null)
             {
                 children = children.Append(_nullInstance);
@@ -401,9 +410,16 @@ GROUP BY
             return children;
         }
 
-        private IEnumerable<VivendiObjectInstanceCollection> Query(object id)
+        private IEnumerable<VivendiObjectInstanceCollection> Query(int? id = null)
         {
-            using var reader = Vivendi.ExecuteReader(VivendiSource.Data, _query, new SqlParameter("ID", id), new SqlParameter("ShowAll", ShowAll), new SqlParameter("Today", DateTime.Today));
+            using var reader = Vivendi.ExecuteReader
+            (
+                VivendiSource.Data,
+                _query,
+                new SqlParameter("ID", (object?)id ?? DBNull.Value),
+                new SqlParameter("ShowAll", ShowAll),
+                new SqlParameter("Today", DateTime.Today)
+            );
             while (reader.Read())
             {
                 var sections = reader.GetIDs("Sections");
@@ -415,7 +431,7 @@ GROUP BY
                 (
                     parent: this,
                     id: reader.GetInt32("ID"),
-                    name: reader.GetString("Name"),
+                    displayName: reader.GetString("Name"),
                     creationDate: reader.GetDateTimeOptional("CreationDate"),
                     lastModified: reader.GetDateTimeOptional("LastModified"),
                     sections: sections
@@ -432,7 +448,7 @@ GROUP BY
 
     internal sealed class VivendiStoreCollection : VivendiCollection
     {
-        private static IEnumerable<VivendiStoreCollection> Query(VivendiCollection parent, object id)
+        private static IEnumerable<VivendiStoreCollection> Query(VivendiCollection parent, int? id = null)
         {
             if (!parent.HasObjectInstance)
             {
@@ -478,10 +494,10 @@ WHERE
     [SeriendruckVorlage] IS NULL AND                                                     -- no reports
     [bZippen] = 0                                                                        -- no zipped collections (because not reproducable in Vivendi)
 ",
-                new SqlParameter("ID", id),
+                new SqlParameter("ID", (object?)id ?? DBNull.Value),
                 new SqlParameter("TargetTable", parent.ObjectType),
                 new SqlParameter("TargetIndex", (object?)parent.ObjectID ?? DBNull.Value),
-                new SqlParameter("Parent", parent is VivendiStoreCollection ? (object?)parent.ID : DBNull.Value)
+                new SqlParameter("Parent", parent is VivendiStoreCollection storeCollection ? (object?)storeCollection.ID : DBNull.Value)
             );
             while (reader.Read())
             {
@@ -489,7 +505,7 @@ WHERE
                 (
                     parent: parent,
                     id: reader.GetInt32("ID"),
-                    name: reader.GetString("Name"),
+                    displayName: reader.GetString("Name"),
                     lastModified: reader.GetDateTimeOptional("LastModified"),
                     sections: reader.GetIDsOptional("Sections"),
                     maxDocumentSize: reader.GetInt32Optional("MaxDocumentSize"),
@@ -500,13 +516,24 @@ WHERE
             }
         }
 
-        internal static IEnumerable<VivendiStoreCollection> QueryAll(VivendiCollection parent) => Query(parent, DBNull.Value);
+        internal static IEnumerable<VivendiStoreCollection> QueryAll(VivendiCollection parent) => Query(parent);
 
         internal static VivendiStoreCollection QueryOne(VivendiCollection parent, int id) => Query(parent, id).SingleOrDefault();
 
-        private VivendiStoreCollection(VivendiCollection parent, int id, string name, DateTime? lastModified, IEnumerable<int>? sections, int? maxDocumentSize, int accessLevel, int? lockAfterMonths, bool retainRevisions)
-        : base(parent, VivendiResourceType.StoreCollection, id, name, lastModified: lastModified)
+        private VivendiStoreCollection(VivendiCollection parent, int id, string displayName, DateTime? lastModified, IEnumerable<int>? sections, int? maxDocumentSize, int accessLevel, int? lockAfterMonths, bool retainRevisions)
+        : base
+        (
+              parent: parent,
+              name: FormatTypeAndId(VivendiResourceType.StoreCollection, id),
+              lastModified: lastModified,
+              localizedName: displayName
+        )
         {
+            ID = id;
+            LockAfterMonths = lockAfterMonths;
+            MaxDocumentSize = maxDocumentSize == 0 ? null : maxDocumentSize;
+            RequiredAccessLevel = accessLevel;
+            RetainRevisions = retainRevisions;
             if (sections != null)
             {
                 var result = new HashSet<int>();
@@ -523,11 +550,9 @@ WHERE
                 }
                 Sections = result;
             }
-            LockAfterMonths = lockAfterMonths;
-            MaxDocumentSize = maxDocumentSize == 0 ? null : maxDocumentSize;
-            RequiredAccessLevel = accessLevel;
-            RetainRevisions = retainRevisions;
         }
+
+        public int ID { get; }
 
         public int? LockAfterMonths { get; }
 
