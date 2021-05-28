@@ -41,7 +41,7 @@ namespace Aufbauwerk.Tools.Vivendi
         {
             get
             {
-                var dot = Name.IndexOf('.');
+                var dot = Name.LastIndexOf('.');
                 return dot > -1 ? Name.Substring(0, dot) : Name;
             }
         }
@@ -151,6 +151,30 @@ VALUES
 
         private const string WebDAVPrefix = "webdav:v2:";
 
+        private static string? BuildLocalizedName(string name, string displayName)
+        {
+            if (name == displayName)
+            {
+                // no localized name needed
+                return null;
+            }
+
+            // test if the extension is the same
+            var dot = name.LastIndexOf('.');
+            if (dot > -1)
+            {
+                var extension = name.Substring(dot);
+                if (displayName.EndsWith(extension, StringComparison.Ordinal))
+                {
+                    // only return the file name
+                    return displayName.Substring(0, displayName.Length - extension.Length);
+                }
+            }
+
+            // return the entire display name
+            return displayName;
+        }
+
         internal static VivendiStoreDocument Create(VivendiStoreCollection parent, string name, DateTime creationDate, DateTime lastModified, byte[] data)
         {
             EnsureValidName(parent, ref name);
@@ -193,7 +217,7 @@ VALUES
     -2,
     -2,
     @Location,
-    @Name,
+    @DisplayName,
     @TargetDescription,
     @CreationDate,
     @UserName,
@@ -216,7 +240,7 @@ VALUES
                 new SqlParameter("TargetIndex", (object?)parent.ObjectID ?? DBNull.Value),
                 new SqlParameter("TargetTable", parent.ObjectType),
                 new SqlParameter("Location", WebDAVPrefix + name),
-                new SqlParameter("Name", name),
+                new SqlParameter("DisplayName", name),
                 new SqlParameter("TargetDescription", parent.ObjectName),
                 new SqlParameter("CreationDate", creationDate),
                 new SqlParameter("LastModified", lastModified),
@@ -231,7 +255,7 @@ VALUES
                 additionalTargets: false,
                 section: null,
                 name: name,
-                displayName: null,
+                displayName: name,
                 creationDate: creationDate,
                 lastModified: lastModified,
                 data: data,
@@ -301,7 +325,7 @@ EXISTS
             }
         }
 
-        private static IEnumerable<VivendiStoreDocument> Query(VivendiStoreCollection parent, int? lookupId = null, string? lookupName = null)
+        private static IEnumerable<VivendiStoreDocument> Query(VivendiStoreCollection parent, int? id = null, string? name = null)
         {
             using var reader = parent.Vivendi.ExecuteReader
             (
@@ -328,66 +352,25 @@ WHERE
     (@Location IS NULL OR [Speicherort] = @Location) AND                               -- match the name if one is given
     [bGeZippt] = 0                                                                     -- no zipped docs (because not reproducible in Vivendi)
 ",
-                new SqlParameter("ID", (object?)lookupId ?? DBNull.Value),
+                new SqlParameter("ID", (object?)id ?? DBNull.Value),
                 new SqlParameter("Parent", parent.ID),
                 new SqlParameter("TargetIndex", (object?)parent.ObjectID ?? DBNull.Value),
                 new SqlParameter("TargetTable", parent.ObjectType),
-                new SqlParameter("Location", lookupName != null ? WebDAVPrefix + lookupName : (object)DBNull.Value)
+                new SqlParameter("Location", name != null ? WebDAVPrefix + name : (object)DBNull.Value)
             );
             while (reader.Read())
             {
-                // handle names based on whether the document was created by WebDAV
+                // read common properties and create the document
                 var location = reader.GetString("Location");
-                var id = reader.GetInt32("ID");
                 var displayName = reader.GetString("DisplayName");
-                string name;
-                if (location.StartsWith(WebDAVPrefix))
-                {
-                    name = location.Substring(WebDAVPrefix.Length);
-                    if (string.Equals(displayName, name, Vivendi.PathComparison))
-                    {
-                        // no display name needed
-                        displayName = null;
-                    }
-                    else
-                    {
-                        var dot = name.LastIndexOf('.');
-                        if (dot > -1)
-                        {
-                            var extension = name.Substring(dot);
-                            if (displayName.EndsWith(extension, Vivendi.PathComparison))
-                            {
-                                // remove the common extension
-                                displayName = displayName.Substring(0, displayName.Length - extension.Length);
-                            }
-                        }
-                    }
-                }
-                else
-                {
-                    // use an type/ID string together with the extension if the latter is valid
-                    var extension = string.Empty;
-                    var dot = displayName.LastIndexOf('.');
-                    if (dot > -1)
-                    {
-                        var extensionTest = displayName.Substring(dot);
-                        if (IsValidName(extension))
-                        {
-                            displayName = displayName.Substring(0, dot);
-                            extension = extensionTest;
-                        }
-                    }
-                    name = FormatTypeAndId(VivendiResourceType.StoreDocument, id, extension);
-                }
-
-                // create the document
+                var docId = reader.GetInt32("ID");
                 yield return new VivendiStoreDocument
                 (
                     parent: parent,
-                    id: id,
+                    id: docId,
                     additionalTargets: reader.GetBoolean("AdditionalTargets"),
                     section: reader.GetInt32Optional("Section"),
-                    name: name,
+                    name: location.StartsWith(WebDAVPrefix, StringComparison.Ordinal) ? location.Substring(WebDAVPrefix.Length) : FormatTypeAndId(VivendiResourceType.StoreDocument, docId, getSafeExtension(displayName)),
                     displayName: displayName,
                     creationDate: reader.GetDateTime("CreationDate"),
                     lastModified: reader.GetDateTime("LastModified"),
@@ -397,17 +380,32 @@ WHERE
                     signed: reader.GetBoolean("Signed")
                 );
             }
+
+            static string getSafeExtension(string displayName)
+            {
+                var dot = displayName.LastIndexOf('.');
+                if (dot > -1)
+                {
+                    var extension = displayName.Substring(dot);
+                    if (IsValidName(extension))
+                    {
+                        return extension;
+                    }
+                }
+                return string.Empty;
+            }
         }
 
         internal static IEnumerable<VivendiStoreDocument> QueryAll(VivendiStoreCollection parent) => Query(parent);
 
-        internal static VivendiStoreDocument QueryByID(VivendiStoreCollection parent, int id) => Query(parent, lookupId: id).SingleOrDefault();
+        internal static VivendiStoreDocument QueryByID(VivendiStoreCollection parent, int id) => Query(parent, id: id).SingleOrDefault();
 
-        internal static VivendiStoreDocument QueryByName(VivendiStoreCollection parent, string name) => Query(parent, lookupName: name).SingleOrDefault();
+        internal static VivendiStoreDocument QueryByName(VivendiStoreCollection parent, string name) => Query(parent, name: name).SingleOrDefault();
 
         private readonly bool _additionalTargets;
         private DateTime _creationDate;
         private byte[]? _data;
+        private string _displayName;
         private bool _isDeletedOrMoved;
         private DateTime _lastModified;
         private readonly DateTime? _lockDate;
@@ -415,13 +413,14 @@ WHERE
         private readonly bool _signed;
         private int _size;
 
-        private VivendiStoreDocument(VivendiStoreCollection parent, int id, bool additionalTargets, int? section, string name, string? displayName, DateTime creationDate, DateTime lastModified, byte[]? data, int size, DateTime? lockDate, bool signed)
-        : base(parent, name, displayName)
+        private VivendiStoreDocument(VivendiStoreCollection parent, int id, bool additionalTargets, int? section, string name, string displayName, DateTime creationDate, DateTime lastModified, byte[]? data, int size, DateTime? lockDate, bool signed)
+        : base(parent, name, BuildLocalizedName(name, displayName))
         {
             _parent = parent;
             _additionalTargets = additionalTargets;
             _creationDate = creationDate;
             _data = data;
+            _displayName = displayName;
             _isDeletedOrMoved = false;
             _lastModified = lastModified;
             _lockDate = lockDate;
@@ -537,7 +536,7 @@ WHERE [Z_DA] = @ID;
             {
                 EnsureNotDeletedOrMoved();
                 EnsureCanRead();
-                return LocalizedName ?? NameWithoutExtension;
+                return _displayName;
             }
             set
             {
@@ -546,11 +545,9 @@ WHERE [Z_DA] = @ID;
                 EnsureNotDeletedOrMoved();
 
                 // update the document if the name has changed
-                if (value != (LocalizedName ?? NameWithoutExtension))
+                if (value != _displayName)
                 {
                     EnsureCanWrite();
-                    var dot = Name.IndexOf('.');
-                    var displayName = dot > -1 ? value + Name.Substring(dot) : value;
                     Vivendi.ExecuteNonQuery
                     (
                         VivendiSource.Store,
@@ -559,10 +556,11 @@ UPDATE [dbo].[DATEI_ABLAGE]
 SET [Dateiname] = @DisplayName
 WHERE [Z_DA] = @ID
 ",
-                        new SqlParameter("DisplayName", displayName),
+                        new SqlParameter("DisplayName", value),
                         new SqlParameter("ID", ID)
                     );
-                    LocalizedName = value;
+                    _displayName = value;
+                    LocalizedName = BuildLocalizedName(Name, value);
                 }
             }
         }
@@ -722,7 +720,7 @@ SET
     [ZielTabelle1] = @TargetTable,
     [ZielBeschreibung] = @TargetDescription,
     [Speicherort] = @Location,
-    [Dateiname] = @Name
+    [Dateiname] = @DisplayName
 WHERE [Z_DA] = @ID
 ",
                 new SqlParameter("Parent", destParent.ID),
@@ -730,7 +728,7 @@ WHERE [Z_DA] = @ID
                 new SqlParameter("TargetTable", destParent.ObjectType),
                 new SqlParameter("TargetDescription", destParent.ObjectName),
                 new SqlParameter("Location", WebDAVPrefix + destName),
-                new SqlParameter("Name", destName),
+                new SqlParameter("DisplayName", destName),
                 new SqlParameter("ID", ID)
             );
             _isDeletedOrMoved = true;
