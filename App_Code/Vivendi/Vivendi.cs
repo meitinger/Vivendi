@@ -36,7 +36,7 @@ namespace Aufbauwerk.Tools.Vivendi
         public static readonly StringComparer PathComparer = StringComparer.OrdinalIgnoreCase;
         public static readonly StringComparison PathComparison = StringComparison.OrdinalIgnoreCase;
 
-        public static Vivendi CreateRoot(string userName, IDictionary<VivendiSource, string> connectionStrings, string displayName = "(Hauptgruppe)") => new Vivendi(null, string.Empty, userName, connectionStrings, displayName);
+        public static Vivendi CreateRoot(string userName, IDictionary<VivendiSource, string> connectionStrings, string? displayName = "(Hauptgruppe)") => new Vivendi(null, string.Empty, userName, connectionStrings, displayName);
 
         private readonly IDictionary<VivendiSource, string> _connectionStrings;
         private short _maxReadAccessLevel;

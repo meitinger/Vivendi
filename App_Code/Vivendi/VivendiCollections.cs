@@ -38,7 +38,7 @@ namespace Aufbauwerk.Tools.Vivendi
             }
         }
 
-        public static VivendiCollection CreateStaticRoot(FileAttributes attributes = FileAttributes.Normal, string displayName = "") => new VivendiStaticCollection(null, displayName, attributes);
+        public static VivendiCollection CreateStaticRoot(FileAttributes attributes = FileAttributes.Normal) => new VivendiStaticCollection(null, string.Empty, attributes);
 
         private readonly DateTime? _creationDate;
         private readonly DateTime? _lastModified;
