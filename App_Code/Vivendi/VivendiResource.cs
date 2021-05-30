@@ -48,26 +48,29 @@ namespace Aufbauwerk.Tools.Vivendi
             public readonly string Name;
         }
 
-        private const string NamePrefix = "DavWWW";
-        private static readonly char[] InvalidNameChars = new char[] { '"', '<', '>', '|', '\0', '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\a', '\b', '\t', '\n', '\v', '\f', '\r', '\u000e', '\u000f', '\u0010', '\u0011', '\u0012', '\u0013', '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001a', '\u001b', '\u001c', '\u001d', '\u001e', '\u001f', ':', '*', '?', '\\', '/' };
+        internal static readonly char[] ForbiddenNameEndingChars = new char[] { ' ', '.' };
+        internal static readonly char[] InvalidNameChars = new char[] { '\0', '\u0001', '\u0002', '\u0003', '\u0004', '\u0005', '\u0006', '\u0007', '\u0008', '\u0009', '\u000A', '\u000B', '\u000C', '\u000D', '\u000E', '\u000F', '\u0010', '\u0011', '\u0012', '\u0013', '\u0014', '\u0015', '\u0016', '\u0017', '\u0018', '\u0019', '\u001A', '\u001B', '\u001C', '\u001D', '\u001E', '\u001F', '"', '%', '*', '/', ':', '<', '>', '?', '\\', '|' };
+        internal const string ReservedNamePrefix = "DavWWW";
 
-        internal static bool IsValidName(string name) => name.IndexOfAny(InvalidNameChars) == -1;
-
-        internal static bool TryParseTypeAndID(string name, out VivendiResourceType type, out int id)
+        internal static void EnsureNameLength(string name, int maxLength)
         {
-            // remove the extension and parse the remaining name
-            var dot = name.LastIndexOf('.');
-            var typeAndId = (dot > -1 ? name.Substring(0, dot) : name).Split('-');
-            if (typeAndId.Length == 3 && typeAndId[0] == NamePrefix && int.TryParse(typeAndId[1], NumberStyles.None, CultureInfo.InvariantCulture, out var typeNumeric) && int.TryParse(typeAndId[2], NumberStyles.None, CultureInfo.InvariantCulture, out id))
+            // make sure the name is not empty or too long
+            if (string.IsNullOrWhiteSpace(name))
             {
-                type = (VivendiResourceType)typeNumeric;
-                return true;
+                throw VivendiException.ResourceNameIsInvalid();
             }
-            else
+            if (name.Length > maxLength)
             {
-                type = 0;
-                id = -1;
-                return false;
+                throw VivendiException.ResourceNameExceedsRange(maxLength);
+            }
+        }
+
+        internal static void EnsureValidNameWithoutPrefix(string name)
+        {
+            // check length and content of the name
+            if (!IsValidName(name) || name.StartsWith(ReservedNamePrefix, Vivendi.PathComparison))
+            {
+                throw VivendiException.ResourceNameIsInvalid();
             }
         }
 
@@ -82,7 +85,27 @@ namespace Aufbauwerk.Tools.Vivendi
             {
                 throw new ArgumentOutOfRangeException(nameof(id), "Resource IDs must be non-negative.");
             }
-            return Invariant($"{NamePrefix}-{(int)type}-{id}{extension}");
+            return Invariant($"{ReservedNamePrefix}-{(int)type}-{id}{extension}");
+        }
+
+        internal static bool IsValidName(string name) => name.Length > 0 && name.IndexOfAny(InvalidNameChars) == -1 && Array.IndexOf(ForbiddenNameEndingChars, name[name.Length - 1]) == -1;
+
+        internal static bool TryParseTypeAndID(string name, out VivendiResourceType type, out int id)
+        {
+            // remove the extension and parse the remaining name
+            var dot = name.LastIndexOf('.');
+            var typeAndId = (dot > -1 ? name.Substring(0, dot) : name).Split('-');
+            if (typeAndId.Length == 3 && string.Equals(typeAndId[0], ReservedNamePrefix, Vivendi.PathComparison) && int.TryParse(typeAndId[1], NumberStyles.None, CultureInfo.InvariantCulture, out var typeNumeric) && int.TryParse(typeAndId[2], NumberStyles.None, CultureInfo.InvariantCulture, out id))
+            {
+                type = (VivendiResourceType)typeNumeric;
+                return true;
+            }
+            else
+            {
+                type = 0;
+                id = -1;
+                return false;
+            }
         }
 
         private ObjectInstance? _objectInstance;
@@ -96,9 +119,9 @@ namespace Aufbauwerk.Tools.Vivendi
             {
                 throw new ArgumentException("Invalid name and parent combination.");
             }
-            if (!IsValidName(name))
+            if (parent != null && !IsValidName(name))
             {
-                throw new ArgumentOutOfRangeException(nameof(name), "Name contains invalid characters.");
+                throw new ArgumentException("Invalid name.", nameof(name));
             }
 
             Parent = parent;

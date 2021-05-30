@@ -149,11 +149,13 @@ VALUES
 );
 ";
 
+        private const int MaxDisplayNameLength = 255;
+        private static readonly int MaxNameLength = 255 - WebDAVPrefix.Length;
         private const string WebDAVPrefix = "webdav:v2:";
 
         private static string? BuildLocalizedName(string name, string displayName)
         {
-            if (name == displayName)
+            if (string.Equals(name, displayName, StringComparison.Ordinal))
             {
                 // no localized name needed
                 return null;
@@ -265,20 +267,6 @@ VALUES
             );
         }
 
-        private static void EnsureNameLength(string name)
-        {
-            // make sure the name is not empty or too long
-            const int MaxLength = 255;
-            if (name.Length == 0)
-            {
-                throw VivendiException.ResourceNameIsInvalid();
-            }
-            if (name.Length > MaxLength)
-            {
-                throw VivendiException.ResourceNameExceedsRange(MaxLength);
-            }
-        }
-
         private static void EnsureSize(int? maxSize, int documentSize)
         {
             // make sure the document doesn't exceed the collection's size limit
@@ -290,13 +278,10 @@ VALUES
 
         private static void EnsureValidName(VivendiStoreCollection parent, ref string name)
         {
-            // remove trailing dots, check the length, characters and special format
-            name = name.TrimEnd('.');
-            EnsureNameLength(name);
-            if (!IsValidName(name) || TryParseTypeAndID(name, out _, out _))
-            {
-                throw VivendiException.ResourceNameIsInvalid();
-            }
+            // remove trailing dots and spaces, check the length, characters and special format
+            name = name.TrimEnd(ForbiddenNameEndingChars);
+            EnsureNameLength(name, MaxNameLength);
+            EnsureValidNameWithoutPrefix(name);
             if
             (
                 (bool)parent.Vivendi.ExecuteScalar
@@ -541,7 +526,7 @@ WHERE [Z_DA] = @ID;
             set
             {
                 // check the value and ensure the document still exists
-                EnsureNameLength(value);
+                EnsureNameLength(value, MaxDisplayNameLength);
                 EnsureNotDeletedOrMoved();
 
                 // update the document if the name has changed
