@@ -627,16 +627,16 @@ WHERE [Z_DA] = @ID
             (
                 VivendiSource.Store,
 @"
-DELETE FROM [dbo].[DATEI_ABLAGE_BLOBS]
-WHERE [Z_DAB] IN
-(
-    SELECT [iBlobs]
-    FROM [dbo].[DATEI_ABLAGE_BLOBS_ZUORD]
-    WHERE [iDateiablage] = @ID
-);
-DELETE FROM [dbo].[DATEI_ABLAGE_BLOBS_ZUORD]
-WHERE [iDateiablage] = @ID;
-DELETE FROM [dbo].[DATEI_ABLAGE]
+DECLARE @iBlobs TABLE(iBlob INT NOT NULL);
+
+DELETE FROM DATEI_ABLAGE_BLOBS_ZUORD
+OUTPUT DELETED.iBlobs INTO @iBlobs
+WHERE iDateiablage = @ID;
+
+DELETE FROM DATEI_ABLAGE_BLOBS
+WHERE Z_DAB IN (SELECT iBlob FROM @iBlobs);
+
+DELETE FROM DATEI_ABLAGE
 WHERE [Z_DA] = @ID;
 ",
                 new SqlParameter("ID", ID)
