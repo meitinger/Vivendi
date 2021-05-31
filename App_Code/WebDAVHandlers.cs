@@ -134,13 +134,6 @@ public abstract class WebDAVCopyAndMoveHandler : WebDAVHandler
             destination.Delete();
         }
 
-        // do the best to copy and move files with the localized name intact
-        var template = destination ?? source;
-        if (template.LocalizedName != null)
-        {
-            destinationName = destinationName.Replace(template.NameWithoutExtension, template.LocalizedName);
-        }
-
         // copy or move the source document to the destination
         PerformOperation(source, destinationUri, destinationCollection, destinationName);
 

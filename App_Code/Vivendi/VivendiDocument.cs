@@ -288,7 +288,7 @@ VALUES
                 (
                     VivendiSource.Store,
 @"
-EXISTS
+SELECT CONVERT(bit, CASE WHEN EXISTS
 (
     SELECT *
     FROM [dbo].[DATEI_ABLAGE]
@@ -297,7 +297,7 @@ EXISTS
         ([ZielIndex1] IS NULL AND @TargetIndex IS NULL OR [ZielIndex1] = @TargetIndex) AND
         [ZielTabelle1] = @TargetTable AND
         [Speicherort] = @Location
-)
+) THEN 1 ELSE 0 END)
 ",
                     new SqlParameter("Parent", parent.ID),
                     new SqlParameter("TargetIndex", (object?)parent.ObjectID ?? DBNull.Value),

@@ -126,7 +126,7 @@ namespace Aufbauwerk.Tools.Vivendi
 
             Parent = parent;
             Name = name;
-            LocalizedName = localizedName ?? name;
+            LocalizedName = localizedName;
         }
 
         public virtual FileAttributes Attributes
