@@ -627,16 +627,16 @@ WHERE [Z_DA] = @ID
             (
                 VivendiSource.Store,
 @"
-DECLARE @iBlobs TABLE(iBlob INT NOT NULL);
+DECLARE @iBlobs TABLE([iBlob] int NOT NULL);
 
-DELETE FROM DATEI_ABLAGE_BLOBS_ZUORD
-OUTPUT DELETED.iBlobs INTO @iBlobs
-WHERE iDateiablage = @ID;
+DELETE FROM [dbo].[DATEI_ABLAGE_BLOBS_ZUORD]
+OUTPUT DELETED.[iBlobs] INTO @iBlobs
+WHERE [iDateiablage] = @ID;
 
-DELETE FROM DATEI_ABLAGE_BLOBS
-WHERE Z_DAB IN (SELECT iBlob FROM @iBlobs);
+DELETE FROM [dbo].[DATEI_ABLAGE_BLOBS]
+WHERE [Z_DAB] IN (SELECT [iBlob] FROM @iBlobs);
 
-DELETE FROM DATEI_ABLAGE
+DELETE FROM [dbo].[DATEI_ABLAGE]
 WHERE [Z_DA] = @ID;
 ",
                 new SqlParameter("ID", ID)
@@ -663,7 +663,26 @@ WHERE [Z_DA] = @ID;
         private void EnsureNoRetainedRevisions()
         {
             // make sure that the document type does not enforce to retain revisions
-            if (_parent.RetainRevisions)
+            if
+            (
+                _parent.RetainRevisions &&
+                (bool)Vivendi.ExecuteScalar
+                (
+                    VivendiSource.Store,
+            @"
+SELECT
+    CONVERT(bit, CASE WHEN [pDateiBlob] IS NOT NULL OR EXISTS
+    (
+        SELECT *
+        FROM [dbo].[DATEI_ABLAGE_BLOBS_ZUORD]
+        WHERE [iDateiablage] = [Z_DA]
+    ) THEN 1 ELSE 0 END)
+FROM [dbo].[DATEI_ABLAGE]
+WHERE [Z_DA] = @ID
+",
+                    new SqlParameter("ID", ID)
+                )
+            )
             {
                 throw VivendiException.DocumentHasRevisions();
             }
