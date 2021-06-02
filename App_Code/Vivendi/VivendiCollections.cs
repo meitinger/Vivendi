@@ -30,14 +30,6 @@ namespace Aufbauwerk.Tools.Vivendi
     {
         private const string DesktopIni = "desktop.ini";
 
-        private static void AddToDesktopIniList(VivendiResource child, IDictionary<string, string> children)
-        {
-            if (!(child is VivendiCollection) && child.LocalizedName != null)
-            {
-                children.Add(child.Name, child.LocalizedName);
-            }
-        }
-
         public static VivendiCollection CreateStaticRoot(FileAttributes attributes = FileAttributes.Normal) => new VivendiStaticCollection(null, string.Empty, attributes);
 
         private readonly DateTime? _creationDate;
@@ -61,16 +53,17 @@ namespace Aufbauwerk.Tools.Vivendi
                 // return all readable children and build the desktop.ini file in the process
                 EnsureCanRead();
                 var children = new Dictionary<string, string>();
-                foreach (var child in ChildrenWithoutDesktopIni)
+                foreach (var child in GetAllChildren())
                 {
                     yield return child;
-                    AddToDesktopIniList(child, children);
+                    if (!(child is VivendiCollection) && child.LocalizedName != null)
+                    {
+                        children.Add(child.Name, child.LocalizedName);
+                    }
                 }
                 yield return BuildDesktopIni(children);
             }
         }
-
-        private IEnumerable<VivendiResource> ChildrenWithoutDesktopIni => _resources.Values.Concat(GetChildren()).Where(r => r.InCollection);
 
         public override DateTime CreationDate
         {
@@ -246,6 +239,17 @@ GROUP BY
             );
         }
 
+        private IEnumerable<VivendiResource> GetAllChildren(bool excludeCollections = false)
+        {
+            // filter out collections (if requested) and only include accessible resources
+            var result = _resources.Values.AsEnumerable();
+            if (excludeCollections)
+            {
+                result = result.Where(child => !(child is VivendiCollection));
+            }
+            return result.Concat(GetChildren(excludeCollections)).Where(r => r.InCollection);
+        }
+
         public VivendiResource? GetChild(string name)
         {
             // ensure the collection is readable
@@ -255,9 +259,12 @@ GROUP BY
             if (string.Equals(name, DesktopIni, Vivendi.PathComparison))
             {
                 var children = new Dictionary<string, string>();
-                foreach (var child in ChildrenWithoutDesktopIni)
+                foreach (var child in GetAllChildren(excludeCollections: true))
                 {
-                    AddToDesktopIniList(child, children);
+                    if (child.LocalizedName != null)
+                    {
+                        children.Add(child.Name, child.LocalizedName);
+                    }
                 }
                 return BuildDesktopIni(children);
             }
@@ -289,7 +296,7 @@ GROUP BY
 
         protected virtual VivendiResource? GetChildByName(string name) => null;
 
-        protected virtual IEnumerable<VivendiResource> GetChildren() => Enumerable.Empty<VivendiResource>();
+        protected virtual IEnumerable<VivendiResource> GetChildren(bool excludeCollections = false) => Enumerable.Empty<VivendiResource>();
 
         public virtual VivendiDocument NewDocument(string name, DateTime creationDate, DateTime lastModified, byte[] data) => throw VivendiException.DocumentNotAllowedInCollection();
     }
@@ -333,7 +340,7 @@ GROUP BY
 
         protected override VivendiResource? GetChildByID(VivendiResourceType type, int id) => type == VivendiResourceType.StoreCollection ? VivendiStoreCollection.QueryOne(this, id) : null;
 
-        protected override IEnumerable<VivendiResource> GetChildren() => VivendiStoreCollection.QueryAll(this);
+        protected override IEnumerable<VivendiResource> GetChildren(bool excludeCollections) => excludeCollections ? Enumerable.Empty<VivendiResource>() : VivendiStoreCollection.QueryAll(this);
     }
 
     internal sealed class VivendiObjectTypeCollection : VivendiCollection
@@ -399,8 +406,13 @@ SELECT
 
         protected override VivendiResource? GetChildByID(VivendiResourceType type, int id) => type == VivendiResourceType.ObjectInstanceCollection ? id == 0 ? _nullInstance : Query(id).SingleOrDefault() : null;
 
-        protected override IEnumerable<VivendiResource> GetChildren()
+        protected override IEnumerable<VivendiResource> GetChildren(bool excludeCollections)
         {
+            if (excludeCollections)
+            {
+                return Enumerable.Empty<VivendiResource>();
+            }
+
             // fetch all objects of this collection's type and optionally append the any instance
             var children = Query();
             if (_nullInstance != null)
@@ -569,7 +581,15 @@ WHERE
 
         protected override VivendiResource? GetChildByName(string name) => VivendiStoreDocument.QueryByName(this, name);
 
-        protected override IEnumerable<VivendiResource> GetChildren() => Enumerable.Empty<VivendiResource>().Concat(VivendiStoreDocument.QueryAll(this)).Concat(VivendiStoreCollection.QueryAll(this));
+        protected override IEnumerable<VivendiResource> GetChildren(bool excludeCollections)
+        {
+            var result = Enumerable.Empty<VivendiResource>();
+            if (!excludeCollections)
+            {
+                result = result.Concat(VivendiStoreCollection.QueryAll(this));
+            }
+            return result.Concat(VivendiStoreDocument.QueryAll(this));
+        }
 
         public override VivendiDocument NewDocument(string name, DateTime creationDate, DateTime lastModified, byte[] data) => VivendiStoreDocument.Create(this, name, creationDate, lastModified, data);
     }
