@@ -378,7 +378,7 @@ GROUP BY
             (
 $@"
 SELECT
-    (SELECT [Systemzeit]{middlePart}0) AS [CreationDate],
+    (SELECT MIN([Systemzeit]){middlePart}0) AS [CreationDate],
     (SELECT MAX([Systemzeit]){middlePart}1) AS [LastModified],{queryWithoutSelect}
 "
             );
