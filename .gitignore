@@ -1,4 +1,5 @@
-/.*/
-/[Bb]in/
-/[Oo]bj/
-/web.config
+.*/
+[Bb]in/
+[Oo]bj/
+appsettings.json
+web.config

@@ -1,0 +1,24 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <Company>AufBauWerk - Unternehmen für junge Menschen</Company>
+    <Copyright>Copyright (c) 2024 by Manuel Meitinger</Copyright>
+    <Description>Vivendi Gateway</Description>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <OutputType>exe</OutputType>
+    <Product>AufBauWerk Erweiterungen für Vivendi</Product>
+    <ProjectDir>src\</ProjectDir>
+    <RootNamespace>AufBauWerk.Vivendi.Gateway</RootNamespace>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Version>1.3.0.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="8.0.10" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.2.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="8.0.1" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+  </ItemGroup>
+
+</Project>
