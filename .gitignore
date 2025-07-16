@@ -3,3 +3,4 @@
 [Oo]bj/
 appsettings.json
 web.config
+*.private.cs

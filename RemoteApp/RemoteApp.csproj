@@ -1,0 +1,29 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <ApplicationIcon>res\RemoteApp.ico</ApplicationIcon>
+    <Company>AufBauWerk - Unternehmen für junge Menschen</Company>
+    <Copyright>Copyright (c) 2024 by Manuel Meitinger</Copyright>
+    <Description>Vivendi RemoteApp</Description>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Nullable>enable</Nullable>
+    <OutputType>winexe</OutputType>
+    <Product>AufBauWerk Erweiterungen für Vivendi</Product>
+    <ProjectDir>src\</ProjectDir>
+    <PublishAot>true</PublishAot>
+    <RootNamespace>AufBauWerk.Vivendi.RemoteApp</RootNamespace>
+    <TargetFramework>net9.0-windows</TargetFramework>
+    <Version>1.2.0.1</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Identity.Client" Version="4.74.0" />
+    <PackageReference Include="Microsoft.Identity.Client.Broker" Version="4.74.0" />
+    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.74.0" />
+    <PackageReference Include="Microsoft.Security.Extensions" Version="1.4.0" />
+  </ItemGroup>
+
+</Project>
