@@ -74,4 +74,5 @@ catch (Exception ex)
 {
     Console.WriteLine(ex);
     Win32.ShowError(ex.Message);
+    Environment.ExitCode = ex.HResult;
 }

@@ -75,11 +75,9 @@ public static partial class Extensions
                 continue;
             }
             byte[] rawData = await responseMsg.EnsureSuccessStatusCode().Content.ReadAsByteArrayAsync(cancellationToken);
-            byte[] salt = rawData[..16];
-            byte[] iv = rawData[16..32];
-            byte[] key = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(Settings.Instance.SharedSecret), salt, iterations: 3000, HashAlgorithmName.SHA256, outputLength: 16);
-            using ICryptoTransform decryptor = Aes.Create().CreateDecryptor(key, iv);
-            byte[] response = decryptor.TransformFinalBlock(rawData, 32, rawData.Length - 32);
+            using Aes aes = Aes.Create();
+            aes.Key = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(Settings.Instance.SharedSecret), salt: rawData.AsSpan(..16), iterations: 3000, HashAlgorithmName.SHA256, outputLength: aes.KeySize / 8);
+            byte[] response = aes.DecryptCbc(ciphertext: rawData.AsSpan(32..), iv: rawData.AsSpan(16..32));
             return (Response?)JsonSerializer.Deserialize(Encoding.UTF8.GetString(response), SerializerContext.GetInfo(typeof(Response))) ?? throw new InvalidDataException();
         }
         return null;
