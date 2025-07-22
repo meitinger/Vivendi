@@ -16,17 +16,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-namespace AufBauWerk.Vivendi.RemoteApp;
+using Microsoft.AspNetCore.Authentication.Negotiate;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
 
-public interface ISettings
-{
-    string ApplicationId { get; }
-    Uri EndpointUri { get; }
-    string TenantId { get; }
-    string Title { get; }
-}
+namespace AufBauWerk.Vivendi.Gateway;
 
-public partial class Settings : ISettings
+[ApiController]
+public sealed class LauncherController(Settings settings) : DatabaseController(settings)
 {
-    public static Settings Instance { get; } = new();
+    [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)]
+    [HttpGet("/launcher")]
+    public Task<IResult> GetAsync() => WithDatabaseAsync(Settings.VivendiUserQuery, reader => Results.Json(new { UserName = reader.GetMandatory<string>("UserName"), Password = reader.GetMandatory<string>("Password") }));
 }

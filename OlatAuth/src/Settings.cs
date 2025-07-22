@@ -16,17 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-namespace AufBauWerk.Vivendi.RemoteApp;
+using SixLabors.ImageSharp;
+using System.Net;
 
-public interface ISettings
-{
-    string ApplicationId { get; }
-    Uri EndpointUri { get; }
-    string TenantId { get; }
-    string Title { get; }
-}
+namespace AufBauWerk.Vivendi.OlatAuth;
 
-public partial class Settings : ISettings
+public class Settings
 {
-    public static Settings Instance { get; } = new();
+    public string AuthProvider { get; set; } = "TOCCO";
+    public string ConnectionString { get; set; } = "";
+    public NetworkCredential Credentials { get; set; } = new();
+    public string LogonUserQuery { get; set; } = "";
+    public Size MaxPortraitSize { get; set; } = new(100, 100);
+    public Uri? RestApiEndpoint { get; set; }
 }

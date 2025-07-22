@@ -18,31 +18,36 @@
 
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using Microsoft.Extensions.Options;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Jpeg;
+using SixLabors.ImageSharp.Processing;
 using System.Data;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace AufBauWerk.Vivendi.Gateway;
+namespace AufBauWerk.Vivendi.OlatAuth;
 
 [ApiController]
 public sealed class OpenOlat : ControllerBase, IDisposable
 {
     private class ManagedUser
     {
-        [JsonRequired, JsonPropertyName("key")] public long IdentityKey { get; set; }
-        [JsonRequired, JsonPropertyName("externalId")] public string ExternalId { get; set; } = "";
+        [JsonPropertyName("key")] public required long IdentityKey { get; set; }
+        [JsonPropertyName("externalId")] public required string ExternalId { get; set; }
         [JsonPropertyName("login")] public string? Login { get; set; }
         [JsonPropertyName("firstName")] public string? FirstName { get; set; }
         [JsonPropertyName("lastName")] public string? LastName { get; set; }
         [JsonPropertyName("email")] public string? Email { get; set; }
         [JsonIgnore] public string UserName { get; set; } = "";
-        [JsonIgnore] public byte[]? Portrait { get; set; }
+        [JsonIgnore] public Stream? Portrait { get; set; }
 
         public bool NeedsUpdate(ManagedUser user)
         {
-            if (ExternalId != user.ExternalId) { throw new InvalidOperationException(); }
+            ArgumentOutOfRangeException.ThrowIfNotEqual(user.ExternalId, ExternalId);
+
             // Login cannot be updated
             return
                 FirstName != user.FirstName ||
@@ -54,11 +59,37 @@ public sealed class OpenOlat : ControllerBase, IDisposable
     private readonly HttpClient client;
     private readonly Settings settings;
 
-    public OpenOlat(Settings settings)
+    public OpenOlat(IOptions<Settings> options)
     {
-        this.settings = settings;
-        client = new(new HttpClientHandler() { Credentials = settings.OpenOlat.Credentials }) { BaseAddress = settings.OpenOlat.RestApiEndpoint };
+        settings = options.Value;
+        client = new(new HttpClientHandler() { Credentials = settings.Credentials }) { BaseAddress = settings.RestApiEndpoint };
         client.DefaultRequestHeaders.Accept.Add(new("application/json"));
+    }
+
+    private async Task<Stream?> CheckPortraitAsync(byte[] data, CancellationToken cancellationToken)
+    {
+        try
+        {
+            MemoryStream inStream = new(data);
+            using Image image = await Image.LoadAsync(inStream, cancellationToken);
+            if (image.Metadata.DecodedImageFormat == JpegFormat.Instance && image.Width <= settings.MaxPortraitSize.Width && image.Height <= settings.MaxPortraitSize.Height)
+            {
+                inStream.Position = 0;
+                return inStream;
+            }
+            image.Mutate(op => op.Resize(new ResizeOptions()
+            {
+                Mode = ResizeMode.Max,
+                Sampler = KnownResamplers.Bicubic,
+                Size = settings.MaxPortraitSize,
+            }));
+            MemoryStream outStream = new();
+            await image.SaveAsJpegAsync(outStream, cancellationToken);
+            outStream.Position = 0;
+            return outStream;
+        }
+        catch (ImageFormatException) { return null; }
+        catch (ImageProcessingException) { return null; }
     }
 
     private async Task<bool> DeletePortraitAsync(long identityKey, CancellationToken cancellationToken)
@@ -73,7 +104,7 @@ public sealed class OpenOlat : ControllerBase, IDisposable
     {
         using SqlConnection connection = new(settings.ConnectionString);
         await connection.OpenAsync(cancellationToken);
-        using SqlCommand command = new(settings.OpenOlat.LogonUserQuery, connection);
+        using SqlCommand command = new(settings.LogonUserQuery, connection);
         command.Parameters.AddWithValue("@UserName", userName);
         command.Parameters.AddWithValue("@Password", password);
         using SqlDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SingleRow, cancellationToken);
@@ -88,7 +119,9 @@ public sealed class OpenOlat : ControllerBase, IDisposable
             LastName = (string)reader[nameof(ManagedUser.LastName)],
             Email = (string)reader[nameof(ManagedUser.Email)],
             UserName = userName,
-            Portrait = portrait == DBNull.Value ? null : (byte[])portrait,
+            Portrait = portrait == DBNull.Value
+                ? null
+                : await CheckPortraitAsync((byte[])portrait, cancellationToken),
         };
     }
 
@@ -105,9 +138,9 @@ public sealed class OpenOlat : ControllerBase, IDisposable
         response.EnsureSuccessStatusCode();
     }
 
-    private async Task PostPortraitAsync(long identityKey, byte[] portrait, CancellationToken cancellationToken)
+    private async Task PostPortraitAsync(long identityKey, Stream portrait, CancellationToken cancellationToken)
     {
-        using ByteArrayContent imageContent = new(portrait);
+        using StreamContent imageContent = new(portrait);
         imageContent.Headers.ContentType = new MediaTypeHeaderValue("image/jpeg");
         using MultipartFormDataContent postContent = new() { { imageContent, "portrait", "portrait.jpg" } };
         using HttpResponseMessage response = await client.PostAsync($"users/{identityKey}/portrait", postContent, cancellationToken);
@@ -143,9 +176,15 @@ public sealed class OpenOlat : ControllerBase, IDisposable
                 await PostUserAsync(user, cancellationToken);
             }
         }
-        await PostAuthenticationAsync(user.IdentityKey, settings.OpenOlat.AuthProvider, user.UserName, credential: null, cancellationToken);
-        if (user.Portrait is null) { await DeletePortraitAsync(user.IdentityKey, cancellationToken); }
-        else { await PostPortraitAsync(user.IdentityKey, user.Portrait, cancellationToken); }
+        await PostAuthenticationAsync(user.IdentityKey, settings.AuthProvider, user.UserName, credential: null, cancellationToken);
+        if (user.Portrait is null)
+        {
+            await DeletePortraitAsync(user.IdentityKey, cancellationToken);
+        }
+        else
+        {
+            await PostPortraitAsync(user.IdentityKey, user.Portrait, cancellationToken);
+        }
     }
 
     public void Dispose()
@@ -154,7 +193,7 @@ public sealed class OpenOlat : ControllerBase, IDisposable
         client.Dispose();
     }
 
-    [HttpPost("/openolat/authenticate")]
+    [HttpPost("/authenticate")]
     public async Task<IResult> PostAuthenticateAsync()
     {
         string? userName = Request.Form["username"];

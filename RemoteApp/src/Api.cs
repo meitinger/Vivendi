@@ -17,35 +17,11 @@
  */
 
 using Microsoft.Identity.Client;
-using System.Net.Http.Json;
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
-using System.Text.Json.Serialization.Metadata;
 
 namespace AufBauWerk.Vivendi.RemoteApp;
 
-[JsonSerializable(typeof(Request))]
-[JsonSerializable(typeof(Response))]
-internal partial class SerializerContext : JsonSerializerContext
-{
-    public static JsonTypeInfo GetInfo(Type type) => Default.GetTypeInfo(type) ?? throw new ArgumentOutOfRangeException(nameof(type));
-}
-
-public class Request
-{
-    public Dictionary<Guid, string> KnownPaths { get; } = [];
-}
-
-public class Response
-{
-    public required string UserName { get; set; }
-    public required string Password { get; set; }
-    public required string RdpFileContent { get; set; }
-}
-
-public static partial class Extensions
+internal static partial class Extensions
 {
     public static async Task<AuthenticationResult?> AcquireTokenAsync(this IPublicClientApplication app, bool useCache, CancellationToken cancellationToken)
     {
@@ -68,17 +44,17 @@ public static partial class Extensions
             using HttpClient client = new();
             HttpRequestMessage requestMsg = new(HttpMethod.Post, Settings.Instance.EndpointUri);
             requestMsg.Headers.Add("Authorization", auth.CreateAuthorizationHeader());
-            requestMsg.Content = JsonContent.Create(request, SerializerContext.GetInfo(typeof(Request)));
+            ByteArrayContent content = new(JsonSerializer.SerializeToUtf8Bytes(request, typeof(Request), SerializerContext.Default));
+            content.Headers.ContentType = new(mediaType: "application/json", charSet: "utf-8");
+            requestMsg.Content = content;
             HttpResponseMessage responseMsg = await client.SendAsync(requestMsg, cancellationToken);
             if (responseMsg.StatusCode is System.Net.HttpStatusCode.Forbidden)
             {
                 continue;
             }
-            byte[] rawData = await responseMsg.EnsureSuccessStatusCode().Content.ReadAsByteArrayAsync(cancellationToken);
-            using Aes aes = Aes.Create();
-            aes.Key = Rfc2898DeriveBytes.Pbkdf2(Encoding.UTF8.GetBytes(Settings.Instance.SharedSecret), salt: rawData.AsSpan(..16), iterations: 3000, HashAlgorithmName.SHA256, outputLength: aes.KeySize / 8);
-            byte[] response = aes.DecryptCbc(ciphertext: rawData.AsSpan(32..), iv: rawData.AsSpan(16..32));
-            return (Response?)JsonSerializer.Deserialize(Encoding.UTF8.GetString(response), SerializerContext.GetInfo(typeof(Response))) ?? throw new InvalidDataException();
+            using Stream responseStream = await responseMsg.EnsureSuccessStatusCode().Content.ReadAsStreamAsync(cancellationToken);
+            Response? response = (Response?)await JsonSerializer.DeserializeAsync(responseStream, typeof(Response), SerializerContext.Default, cancellationToken);
+            return response ?? throw new InvalidDataException();
         }
         return null;
     }

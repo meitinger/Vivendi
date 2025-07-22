@@ -17,30 +17,23 @@
  */
 
 using AufBauWerk.Vivendi.Launcher;
+using Microsoft.Win32;
 using System.Diagnostics;
+using System.Net.Http.Json;
 
 try
 {
-    ArgumentOutOfRangeException.ThrowIfNotEqual(args.Length, 1);
-    byte[] arg = Convert.FromBase64String(args[0]);
-    ArgumentOutOfRangeException.ThrowIfLessThan(arg.Length, 8);
-    DateTime encryptTime = new(BitConverter.ToInt64(arg));
-    DateTime now = DateTime.UtcNow;
-    if (1 < Math.Abs((now - encryptTime).TotalMinutes)) { throw new UnauthorizedAccessException(); }
-    byte[] keyPart1 = Helpers.GetMainModuleHash();
-    using Process vivendi = Helpers.StartVivendi(out byte[] keyPart2);
-    byte[] key = Helpers.XorKeys(keyPart1, keyPart2);
-    Credential credential = Helpers.DecryptCredential(key, arg);
-    for (int numberOfTry = 0; numberOfTry < 600; numberOfTry++)
-    {
-        if (Helpers.TrySignOn(vivendi, credential)) { return; }
-        Thread.Sleep(100);
-    }
-    throw new TimeoutException();
+    const string registryPath = @"HKEY_LOCAL_MACHINE\SOFTWARE\Connext\Vivendi";
+    string launcherUrl = Registry.GetValue(registryPath, "LauncherUrl", null) as string ?? throw new UnauthorizedAccessException();
+    using HttpClient client = new(new HttpClientHandler() { UseDefaultCredentials = true });
+    Credential credential = (Credential?)await client.GetFromJsonAsync(launcherUrl, typeof(Credential), SerializerContext.Default) ?? throw new UnauthorizedAccessException();
+    string? path = Registry.GetValue(registryPath, "Path", null) as string;
+    using Process vivendi = Process.Start(Path.Combine(path ?? AppContext.BaseDirectory, "Vivendi.exe"));
+    vivendi.SignIn(credential);
 }
 catch (Exception ex)
 {
     Console.WriteLine(ex);
-    Helpers.ShowError(ex.Message);
+    Win32.ShowError(ex.Message);
     Environment.ExitCode = ex.HResult;
 }

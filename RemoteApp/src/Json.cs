@@ -16,17 +16,24 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+using System.Text.Json.Serialization;
+
 namespace AufBauWerk.Vivendi.RemoteApp;
 
-public interface ISettings
+[JsonSerializable(typeof(Request))]
+[JsonSerializable(typeof(Response))]
+internal partial class SerializerContext : JsonSerializerContext
 {
-    string ApplicationId { get; }
-    Uri EndpointUri { get; }
-    string TenantId { get; }
-    string Title { get; }
 }
 
-public partial class Settings : ISettings
+public class Request
 {
-    public static Settings Instance { get; } = new();
+    public Dictionary<Guid, string> KnownPaths { get; } = [];
+}
+
+public class Response
+{
+    public required string UserName { get; set; }
+    public required string Password { get; set; }
+    public required string RdpFileContent { get; set; }
 }

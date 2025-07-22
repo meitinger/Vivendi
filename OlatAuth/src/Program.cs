@@ -16,17 +16,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-namespace AufBauWerk.Vivendi.RemoteApp;
+using AufBauWerk.Vivendi.OlatAuth;
+using Microsoft.Extensions.Logging.Configuration;
+using Microsoft.Extensions.Logging.EventLog;
 
-public interface ISettings
-{
-    string ApplicationId { get; }
-    Uri EndpointUri { get; }
-    string TenantId { get; }
-    string Title { get; }
-}
-
-public partial class Settings : ISettings
-{
-    public static Settings Instance { get; } = new();
-}
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
+LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerProvider>(builder.Services);
+builder.Services
+    .Configure<Settings>(builder.Configuration.GetSection("OlatAuth"))
+    .AddWindowsService(options => options.ServiceName = "VivendiOlatAuth")
+    .AddControllers();
+WebApplication app = builder.Build();
+app.MapControllers();
+app.Run();

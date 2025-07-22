@@ -16,17 +16,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-namespace AufBauWerk.Vivendi.RemoteApp;
+using System.Text.Json.Serialization;
 
-public interface ISettings
+namespace AufBauWerk.Vivendi.Launcher;
+
+[JsonSerializable(typeof(Credential))]
+internal partial class SerializerContext : JsonSerializerContext
 {
-    string ApplicationId { get; }
-    Uri EndpointUri { get; }
-    string TenantId { get; }
-    string Title { get; }
 }
 
-public partial class Settings : ISettings
+public class Credential
 {
-    public static Settings Instance { get; } = new();
+    public required string UserName { get; set; }
+    public required string Password { get; set; }
 }

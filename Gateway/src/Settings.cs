@@ -16,44 +16,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using System.Net;
-
 namespace AufBauWerk.Vivendi.Gateway;
 
 public class Settings
 {
-    public string ConnectionString { get; set; } = "";
-    public ApiSettings Api { get; } = new();
-    public AuthenticationSettings Authentication { get; } = new();
-    public CertificateAuthoritySettings CertificateAuthority { get; } = new();
-    public OpenOlatSettings OpenOlat { get; } = new();
-}
-
-public class ApiSettings
-{
-    public string SharedSecret { get; set; } = "";
-    public string PasswordHashTemplate { get; set; } = "";
-}
-
-public class AuthenticationSettings
-{
-
     public string ApplicationId { get; set; } = "";
+    public string ConnectionString { get; set; } = "";
+    public string RemoteAppQuery { get; set; } = "";
+    public string VivendiUserQuery { get; set; } = "";
     public string TenantId { get; set; } = "";
-    public IReadOnlyList<string> AllowedDomains { get; set; } = [];
-    public string VerifyUserQuery { get; set; } = "";
-}
-
-public class CertificateAuthoritySettings
-{
-    public string Certificate { get; set; } = "";
-    public string PrivateKey { get; set; } = "";
-}
-
-public class OpenOlatSettings
-{
-    public Uri? RestApiEndpoint { get; set; }
-    public NetworkCredential Credentials { get; } = new();
-    public string AuthProvider { get; set; } = "";
-    public string LogonUserQuery { get; set; } = "";
 }

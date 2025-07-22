@@ -17,25 +17,22 @@
  */
 
 using AufBauWerk.Vivendi.Gateway;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Logging.Configuration;
 using Microsoft.Extensions.Logging.EventLog;
 
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerProvider>(builder.Services);
 Settings settings = new();
-builder.Configuration
-    .GetRequiredSection("Gateway")
-    .Bind(settings, options => options.ErrorOnUnknownConfiguration = true);
+builder.Configuration.GetRequiredSection("Gateway").Bind(settings);
 builder.Services
     .AddWindowsService(options => options.ServiceName = "VivendiGateway")
     .AddSingleton(settings)
-    .AddSingleton<CertificateAuthority>()
     .AddControllers();
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(settings.BuildJwtOptions());
+builder.Services.AddAuthentication()
+    .AddJwtBearer(settings.BuildJwtOptions)
+    .AddNegotiate();
 WebApplication app = builder.Build();
 app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 app.Run();
