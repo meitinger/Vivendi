@@ -16,119 +16,140 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using Microsoft.Win32.SafeHandles;
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using System.Security.Principal;
 
 namespace AufBauWerk.Vivendi.Gateway;
 
-internal static class Win32
+internal static unsafe partial class Win32
 {
-    private class SafeWtsBuffer : SafeBuffer
-    {
-        public SafeWtsBuffer() : base(ownsHandle: true) { }
-
-        protected override bool ReleaseHandle()
-        {
-            WTSFreeMemory(handle);
-            return true;
-        }
-    }
-
-    private const uint LOGON32_LOGON_INTERACTIVE = 2;
-    private const uint LOGON32_PROVIDER_DEFAULT = 0;
     private const nint WTS_CURRENT_SERVER_HANDLE = 0;
+    private static readonly ReadOnlyCollection<Guid> KnownFolderIds = Array.AsReadOnly<Guid>
+    ([
+        new("FDD39AD0-238F-46AF-ADB4-6C85480369C7"), //Documents
+        new("B4BFCC3A-DB2C-424C-B029-7FE99A87C641"), //Desktop
+        new("374DE290-123F-4565-9164-39C4925E467B"), //Downloads
+        new("4BD8D571-6D19-48D3-BE97-422220080E43"), //Music
+        new("33E28130-4E1E-4676-835A-98395C3BC3BB"), //Pictures
+        new("18989B1D-99B5-455B-841C-AB7C74E4DDFC"), //Videos
+    ]);
 
-    [DllImport("advapi32.dll", EntryPoint = "LogonUserW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool LogonUser(string userName, string? domain, string? password, uint logonType, uint logonProvider, out SafeAccessTokenHandle token);
+    [LibraryImport("kernel32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool CloseHandle(nint handle);
 
-    [DllImport("shell32.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
-    private static extern int SHSetKnownFolderPath(in Guid id, uint flags, SafeAccessTokenHandle token, string path);
+    [LibraryImport("advapi32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool LogonUserW(string userName, string? domain, string? password, LOGON32_LOGON type, LOGON32_PROVIDER provider, nint* token);
 
-    [DllImport("wtsapi32.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
-    private static extern bool WTSDisconnectSession(nint server, int sessionId, bool wait);
+    [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int SHGetKnownFolderPath(in Guid id, KNOWN_FOLDER_FLAG flags, nint token, out string? path);
 
-    [DllImport("wtsapi32.dll", EntryPoint = "WTSEnumerateSessionsW", CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool WTSEnumerateSessions(nint server, uint reserved, uint version, out SafeWtsBuffer sessionInfo, out int count);
+    [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static partial int SHSetKnownFolderPath(in Guid id, KNOWN_FOLDER_FLAG flags, nint token, string path);
 
-    [DllImport("wtsapi32.dll", ExactSpelling = true, CharSet = CharSet.Unicode)]
-    private static extern void WTSFreeMemory(nint handle);
+    [LibraryImport("wtsapi32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool WTSDisconnectSession(nint server, uint sessionId, [MarshalAs(UnmanagedType.Bool)] bool wait);
 
-    [DllImport("wtsapi32.dll", ExactSpelling = true, CharSet = CharSet.Unicode, SetLastError = true)]
-    private static extern bool WTSQueryUserToken(int sessionId, out SafeAccessTokenHandle token);
+    [LibraryImport("wtsapi32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool WTSEnumerateSessionsExW(nint server, uint* level, uint filter, WTS_SESSION_INFO_1W** sessionInfo, uint* count);
 
-    public enum ConnectionState
+    [LibraryImport("wtsapi32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool WTSFreeMemoryExW(WTS_TYPE_CLASS wtsTypeClass, void* memory, uint numberOfEntries);
+
+    private enum KNOWN_FOLDER_FLAG
     {
-        Active,
-        Connected,
-        ConnectQuery,
-        Shadow,
-        Disconnected,
-        Idle,
-        Listen,
-        Reset,
-        Down,
-        Init
+        DONT_VERIFY = 0x00004000,
+        DEFAULT_PATH = 0x00000400,
+        NOT_PARENT_RELATIVE = 0x00000200,
     }
 
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct Session
+    private enum LOGON32_LOGON { INTERACTIVE = 2 }
+
+    private enum LOGON32_PROVIDER { DEFAULT = 0 }
+
+    private enum WTS_CONNECTSTATE_CLASS { Active = 0 }
+
+    private enum WTS_TYPE_CLASS { SessionInfoLevel1 = 2 }
+
+    private struct WTS_SESSION_INFO_1W
     {
-        private readonly SafeAccessTokenHandle GetUserToken()
+        public uint ExecEnvId;
+        public WTS_CONNECTSTATE_CLASS State;
+        public uint SessionId;
+        public char* SessionName;
+        public char* HostName;
+        public char* UserName;
+        public char* DomainName;
+        public char* FarmName;
+    }
+
+    public static void DisconnectSessions(string userName, string domain, bool wait)
+    {
+        uint level = 1;
+        WTS_SESSION_INFO_1W* sessionInfos = null;
+        uint count = 0;
+        try
         {
-            if (!WTSQueryUserToken(SessionId, out var token))
+            if (!WTSEnumerateSessionsExW(WTS_CURRENT_SERVER_HANDLE, &level, 0, &sessionInfos, &count))
             {
                 throw new Win32Exception();
             }
-            return token;
-        }
-
-        public int SessionId;
-        [MarshalAs(UnmanagedType.LPTStr)]
-        public string WinStationName;
-        public ConnectionState State;
-
-        public readonly SecurityIdentifier Sid
-        {
-            get
+            for (uint i = 0; i < count; i++)
             {
-                using SafeAccessTokenHandle token = GetUserToken();
-                using WindowsIdentity identity = new(token.DangerousGetHandle());
-                GC.KeepAlive(token);
-                return identity.User ?? throw new NotSupportedException();
+                WTS_SESSION_INFO_1W sessionInfo = sessionInfos[i];
+                if
+                (
+                    sessionInfo.State is WTS_CONNECTSTATE_CLASS.Active &&
+                    sessionInfo.UserName is not null &&
+                    sessionInfo.DomainName is not null &&
+                    userName.Equals(new(sessionInfo.UserName), StringComparison.OrdinalIgnoreCase) &&
+                    domain.Equals(new(sessionInfo.DomainName), StringComparison.OrdinalIgnoreCase) &&
+                    !WTSDisconnectSession(WTS_CURRENT_SERVER_HANDLE, sessionInfo.SessionId, wait)
+                )
+                {
+                    throw new Win32Exception();
+                }
             }
         }
-
-        public readonly void Disconnect(bool wait)
+        finally
         {
-            if (!WTSDisconnectSession(WTS_CURRENT_SERVER_HANDLE, SessionId, wait))
+            if (sessionInfos is not null)
+            {
+                WTSFreeMemoryExW(WTS_TYPE_CLASS.SessionInfoLevel1, sessionInfos, count);
+            }
+        }
+    }
+
+    public static void RedirectKnownFolders(string userName, string domain, string password, IReadOnlyDictionary<Guid, string> redirects)
+    {
+        nint token = 0;
+        try
+        {
+            if (!LogonUserW(userName, domain, password, LOGON32_LOGON.INTERACTIVE, LOGON32_PROVIDER.DEFAULT, &token))
             {
                 throw new Win32Exception();
             }
+            foreach (Guid knownFolderId in KnownFolderIds)
+            {
+                if (!redirects.TryGetValue(knownFolderId, out string? path))
+                {
+                    Marshal.ThrowExceptionForHR(SHGetKnownFolderPath(knownFolderId, KNOWN_FOLDER_FLAG.DONT_VERIFY | KNOWN_FOLDER_FLAG.DEFAULT_PATH | KNOWN_FOLDER_FLAG.NOT_PARENT_RELATIVE, token, out path));
+                    if (path is null) { continue; }
+                }
+                Marshal.ThrowExceptionForHR(SHSetKnownFolderPath(knownFolderId, 0, token, path));
+            }
         }
-    }
-
-    public static Session[] EnumerateLocalSessions()
-    {
-        if (!WTSEnumerateSessions(WTS_CURRENT_SERVER_HANDLE, reserved: 0, version: 1, out var sessionInfo, out var count))
+        finally
         {
-            throw new Win32Exception();
+            if (token is not 0)
+            {
+                CloseHandle(token);
+            }
         }
-        sessionInfo.Initialize((uint)count, (uint)Marshal.SizeOf<Session>());
-        Session[] result = new Session[count];
-        sessionInfo.ReadArray(0, result, 0, count);
-        return result;
     }
-
-    public static SafeAccessTokenHandle LogonLocalUser(string userName, string password)
-    {
-        if (!LogonUser(userName, domain: null, password, LOGON32_LOGON_INTERACTIVE, LOGON32_PROVIDER_DEFAULT, out var handle))
-        {
-            throw new Win32Exception();
-        }
-        return handle;
-    }
-
-    public static void RedirectKnownFolder(this SafeAccessTokenHandle token, Guid knownFolderId, string path) => Marshal.ThrowExceptionForHR(SHSetKnownFolderPath(knownFolderId, flags: 0, token, path));
 }

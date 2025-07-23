@@ -18,6 +18,7 @@
 
 using Microsoft.Identity.Client;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 using System.Text;
@@ -130,25 +131,25 @@ public static partial class Win32
     #region LibraryImports
 
     [LibraryImport("ole32.dll")]
-    private static unsafe partial int CoCreateInstance(in Guid rclsid, void* pUnkOuter, CLSCTX dwClsContext, in Guid riid, out void* ppv);
+    private static unsafe partial int CoCreateInstance(in Guid classId, void* unknownOuter, CLSCTX context, in Guid interfaceId, out void* ptr);
 
     [LibraryImport("user32.dll")]
     private static partial nint GetDesktopWindow();
 
-    [LibraryImport("user32.dll", EntryPoint = "MessageBoxW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
-    private static partial int MessageBox(nint window, string text, string? caption, MB type);
+    [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
+    private static partial int MessageBoxW(nint window, string text, string? caption, MB type);
 
     [LibraryImport("oleaut32.dll")]
-    private static unsafe partial SAFEARRAY* SafeArrayCreate(VT vt, uint cDims, SAFEARRAYBOUND* rgsabound);
+    private static unsafe partial SAFEARRAY* SafeArrayCreate(VT type, uint dims, SAFEARRAYBOUND* bounds);
 
     [LibraryImport("oleaut32.dll")]
-    private static unsafe partial int SafeArrayDestroy(SAFEARRAY* psa);
+    private static unsafe partial int SafeArrayDestroy(SAFEARRAY* array);
 
     [LibraryImport("oleaut32.dll")]
-    private static unsafe partial int SafeArrayPutElement(SAFEARRAY* psa, int* rgIndices, nint pv);
+    private static unsafe partial int SafeArrayPutElement(SAFEARRAY* array, int* indices, nint element);
 
     [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
-    private static unsafe partial int SHGetKnownFolderPath(in Guid rfid, KF_FLAG dwFlags, nint hToken, out string? ppszPath);
+    private static unsafe partial int SHGetKnownFolderPath(in Guid id, KF_FLAG flags, nint token, out string? path);
 
     #endregion
 
@@ -173,13 +174,7 @@ public static partial class Win32
 #pragma warning restore CS0649
     #endregion
 
-    public static string GetKnownFolderPath(Guid knownFolderId)
-    {
-        Marshal.ThrowExceptionForHR(SHGetKnownFolderPath(knownFolderId, KF_FLAG.DONT_VERIFY | KF_FLAG.NO_ALIAS | KF_FLAG.NO_PACKAGE_REDIRECTION, 0, out string? path));
-        return path ?? string.Empty;
-    }
-
-    public static void ShowError(string message) => MessageBox(0, message, Settings.Instance.Title, MB.OK | MB.ICONERROR | MB.SETFOREGROUND);
+    public static void ShowError(string message) => MessageBoxW(0, message, Settings.Instance.Title, MB.OK | MB.ICONERROR | MB.SETFOREGROUND);
 
     public static unsafe Process StartRemoteApp(string userName, string password, string rdpFileContent)
     {
@@ -201,6 +196,8 @@ public static partial class Win32
             ComInterfaceMarshaller<IMsRdpSessionManager>.Free(managerPtr);
         }
     }
+
+    public static bool TryGetKnownFolderPath(Guid knownFolderId, [NotNullWhen(true)] out string? path) => 0 <= SHGetKnownFolderPath(knownFolderId, KF_FLAG.DONT_VERIFY | KF_FLAG.NO_ALIAS | KF_FLAG.NO_PACKAGE_REDIRECTION, 0, out path) && string.IsNullOrWhiteSpace(path);
 
     public static PublicClientApplicationBuilder WithDesktopAsParent(this PublicClientApplicationBuilder builder) => builder.WithParentActivityOrWindow(GetDesktopWindow);
 }

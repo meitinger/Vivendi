@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Company>AufBauWerk - Unternehmen für junge Menschen</Company>
     <Copyright>Copyright (c) 2024 by Manuel Meitinger</Copyright>
     <Description>Vivendi Gateway</Description>
@@ -20,7 +21,6 @@
     <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.2" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.7" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.7" />
-    <PackageReference Include="System.DirectoryServices.AccountManagement" Version="9.0.7" />
   </ItemGroup>
 
 </Project>

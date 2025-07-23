@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+using System.Net;
 using System.Text.Json.Serialization;
 
 namespace AufBauWerk.Vivendi.RemoteApp;
@@ -34,6 +35,7 @@ public class Request
 public class Response
 {
     public required string UserName { get; set; }
+    public required string Domain { get; set; }
     public required string Password { get; set; }
     public required string RdpFileContent { get; set; }
 }

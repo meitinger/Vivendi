@@ -17,32 +17,11 @@
  */
 
 using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using System.Data;
-using System.Data.SqlTypes;
+using System.Security.Claims;
 
 namespace AufBauWerk.Vivendi.Gateway;
-
-public class DatabaseController(Settings settings) : ControllerBase
-{
-    public Settings Settings => settings;
-
-    public Task<IResult> WithDatabaseAsync(string queryString, Func<SqlDataReader, IResult> action) => WithDatabaseAsync(queryString, (reader, _) => Task.FromResult(action(reader)));
-
-    public async Task<IResult> WithDatabaseAsync(string queryString, Func<SqlDataReader, CancellationToken, Task<IResult>> action)
-    {
-        string? userName = User?.Identity?.Name;
-        if (userName is null) { return Results.Forbid(); }
-        using SqlConnection connection = new(settings.ConnectionString);
-        using SqlCommand command = new(queryString, connection);
-        await connection.OpenAsync(HttpContext.RequestAborted);
-        command.Parameters.AddWithValue("@UserName", userName);
-        using SqlDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SingleRow, HttpContext.RequestAborted);
-        if (!await reader.ReadAsync(HttpContext.RequestAborted)) { return Results.Forbid(); }
-        return await action(reader, HttpContext.RequestAborted);
-    }
-}
 
 internal static class Extensions
 {
@@ -61,19 +40,18 @@ internal static class Extensions
         };
     }
 
-    public static T GetMandatory<T>(this SqlDataReader reader, string name) where T : notnull
-    {
-        object value = reader[name];
-        if (value == DBNull.Value) { throw new SqlNullValueException(); }
-        if (value is not T typed) { throw new SqlTypeException(); }
-        return typed;
-    }
+    public static Task<string> GetStringAsync(this SqlDataReader reader, string name, CancellationToken cancellationToken) => reader.GetFieldValueAsync<string>(reader.GetOrdinal(name), cancellationToken);
 
-    public static T? GetOptional<T>(this SqlDataReader reader, string name)
+    public static async Task<T?> TranslateAsync<T>(this ClaimsPrincipal? user, string connectionString, string queryString, Func<SqlDataReader, CancellationToken, Task<T>> resolver, CancellationToken cancellationToken) where T : class
     {
-        object value = reader[name];
-        if (value == DBNull.Value) { return default; }
-        if (value is not T typed) { throw new SqlTypeException(); }
-        return typed;
+        string? userName = user?.Identity?.Name;
+        if (userName is null) { return null; }
+        using SqlConnection connection = new(connectionString);
+        using SqlCommand command = new(queryString, connection);
+        command.Parameters.AddWithValue("@UserName", userName);
+        await connection.OpenAsync(cancellationToken);
+        using SqlDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SingleRow, cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken)) { return null; }
+        return await resolver(reader, cancellationToken);
     }
 }

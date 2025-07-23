@@ -20,71 +20,41 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
-using Microsoft.Win32.SafeHandles;
-using System.DirectoryServices.AccountManagement;
-using System.Security.Principal;
 
 namespace AufBauWerk.Vivendi.Gateway;
 
 public class RemoteAppRequest
 {
-    public required Dictionary<Guid, string> KnownPaths { get; set; }
+    public Dictionary<Guid, string> KnownPaths { get; } = [];
 }
 
 public class RemoteAppResponse
 {
-    public static RemoteAppResponse FromDatabase(SqlDataReader reader) => new()
+    public static async Task<RemoteAppResponse> FromDatabase(SqlDataReader reader, CancellationToken cancellationToken) => new()
     {
-        UserName = reader.GetMandatory<string>(nameof(UserName)),
-        Password = reader.GetMandatory<string>(nameof(Password)),
-        RdpFileContent = reader.GetMandatory<string>(nameof(RdpFileContent)),
+        UserName = await reader.GetStringAsync(nameof(UserName), cancellationToken),
+        Domain = await reader.GetStringAsync(nameof(Domain), cancellationToken),
+        Password = await reader.GetStringAsync(nameof(Password), cancellationToken),
+        RdpFileContent = await reader.GetStringAsync(nameof(RdpFileContent), cancellationToken),
     };
 
     public required string UserName { get; set; }
+    public required string Domain { get; set; }
     public required string Password { get; set; }
     public required string RdpFileContent { get; set; }
 }
 
 [ApiController]
-public sealed class RemoteAppController(Settings settings) : DatabaseController(settings)
+public sealed class RemoteAppController(Settings settings) : ControllerBase
 {
-    private static SecurityIdentifier UpsertUser(SqlDataReader reader, string userName, string password)
-    {
-        using PrincipalContext context = new(ContextType.Machine);
-        using UserPrincipal principal = UserPrincipal.FindByIdentity(context, IdentityType.SamAccountName, userName) ?? new(context);
-        principal.SamAccountName = userName;
-        principal.Name = userName;
-        principal.SetPassword(password);
-        principal.Enabled = reader.GetMandatory<bool>(nameof(UserPrincipal.Enabled));
-        principal.PasswordNotRequired = false;
-        principal.DisplayName = reader.GetMandatory<string>(nameof(UserPrincipal.DisplayName));
-        principal.Description = reader.GetOptional<string>(nameof(UserPrincipal.Description));
-        principal.AccountExpirationDate = reader.GetOptional<DateTime>(nameof(UserPrincipal.AccountExpirationDate));
-        principal.UserCannotChangePassword = reader.GetMandatory<bool>(nameof(UserPrincipal.UserCannotChangePassword));
-        principal.PasswordNeverExpires = reader.GetMandatory<bool>(nameof(UserPrincipal.PasswordNeverExpires));
-        principal.Save();
-        if (principal.IsAccountLockedOut()) { principal.UnlockAccount(); }
-        return principal.Sid;
-    }
-
     [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
     [HttpGet("/remoteapp")]
-    public Task<IResult> GetAsync(RemoteAppRequest request) => WithDatabaseAsync(Settings.RemoteAppQuery, reader =>
+    public async Task<IResult> GetAsync(RemoteAppRequest request)
     {
-        RemoteAppResponse response = RemoteAppResponse.FromDatabase(reader);
-        SecurityIdentifier sid = UpsertUser(reader, response.UserName, response.Password);
-        foreach (Win32.Session session in Win32.EnumerateLocalSessions())
-        {
-            if (session.State is Win32.ConnectionState.Active && session.Sid == sid)
-            {
-                session.Disconnect(wait: true);
-            }
-        }
-        using SafeAccessTokenHandle user = Win32.LogonLocalUser(response.UserName, response.Password);
-        foreach ((Guid knownFolderId, string path) in request.KnownPaths)
-        {
-            user.RedirectKnownFolder(knownFolderId, path);
-        }
+        if (request.KnownPaths.Values.Any(string.IsNullOrWhiteSpace)) { return Results.BadRequest(); }
+        if (await User.TranslateAsync(settings.ConnectionString, settings.RemoteAppQuery, RemoteAppResponse.FromDatabase, HttpContext.RequestAborted) is not { } response) { return Results.Forbid(); }
+        Win32.DisconnectSessions(response.UserName, response.Domain, wait: true);
+        Win32.RedirectKnownFolders(response.UserName, response.Domain, response.Password, request.KnownPaths);
         return Results.Json(response);
-    });
+    }
 }

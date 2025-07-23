@@ -19,13 +19,26 @@
 using Microsoft.AspNetCore.Authentication.Negotiate;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Data.SqlClient;
 
 namespace AufBauWerk.Vivendi.Gateway;
 
+public class LauncherResponse()
+{
+    public static async Task<LauncherResponse> FromDatabase(SqlDataReader reader, CancellationToken cancellationToken) => new()
+    {
+        UserName = await reader.GetStringAsync(nameof(UserName), cancellationToken),
+        Password = await reader.GetStringAsync(nameof(Password), cancellationToken),
+    };
+
+    public required string UserName { get; set; }
+    public required string Password { get; set; }
+}
+
 [ApiController]
-public sealed class LauncherController(Settings settings) : DatabaseController(settings)
+public sealed class LauncherController(Settings settings) : ControllerBase
 {
     [Authorize(AuthenticationSchemes = NegotiateDefaults.AuthenticationScheme)]
     [HttpGet("/launcher")]
-    public Task<IResult> GetAsync() => WithDatabaseAsync(Settings.VivendiUserQuery, reader => Results.Json(new { UserName = reader.GetMandatory<string>("UserName"), Password = reader.GetMandatory<string>("Password") }));
+    public async Task<IResult> GetAsync() => await User.TranslateAsync(settings.ConnectionString, settings.VivendiUserQuery, LauncherResponse.FromDatabase, HttpContext.RequestAborted) is { } user ? Results.Json(user) : Results.Forbid();
 }

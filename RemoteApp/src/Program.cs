@@ -54,7 +54,10 @@ try
     Request request = new();
     foreach (Guid knownFolderId in knownFolderIds)
     {
-        request.KnownPaths.Add(knownFolderId, Win32.GetKnownFolderPath(knownFolderId));
+        if (Win32.TryGetKnownFolderPath(knownFolderId, out string? path))
+        {
+            request.KnownPaths.Add(knownFolderId, path);
+        }
     }
 
     // authenticate with Entra ID and fetch the remote app definition
@@ -66,7 +69,7 @@ try
     }
 
     // launch the remote app
-    using Process process = Win32.StartRemoteApp(response.UserName, response.Password, response.RdpFileContent);
+    using Process process = Win32.StartRemoteApp(response.Domain + @"\" + response.UserName, response.Password, response.RdpFileContent);
     process.WaitForExit();
     Environment.ExitCode = process.ExitCode;
 }
