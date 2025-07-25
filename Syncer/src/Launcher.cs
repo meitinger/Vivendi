@@ -16,22 +16,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using System.Text.Json.Serialization;
+using System.IO.Pipes;
+using System.Security.Principal;
+using System.Text.Json;
 
-namespace AufBauWerk.Vivendi.RemoteApp;
+namespace AufBauWerk.Vivendi.Syncer;
 
-[JsonSerializable(typeof(Request))]
-[JsonSerializable(typeof(Response))]
-internal partial class SerializerContext : JsonSerializerContext { }
-
-public class Request
+internal sealed class LauncherService(ILogger<LauncherService> logger, Configuration config, Database db) : PipeService("VivendiLauncher", PipeDirection.Out, logger)
 {
-    public Dictionary<Guid, string> KnownPaths { get; } = [];
-}
+    protected override IdentityReference ClientIdentity => config.GetSyncGroupIdentity();
 
-public class Response
-{
-    public required string UserName { get; set; }
-    public required string Password { get; set; }
-    public required byte[] RdpFileContent { get; set; }
+    protected override async Task ExecuteAsync(Stream stream, string userName, CancellationToken stoppingToken)
+    {
+        if (await db.GetVivendiUserAsync(userName, stoppingToken) is VivendiUser user)
+        {
+            await JsonSerializer.SerializeAsync(stream, user, typeof(VivendiUser), SerializerContext.Default, stoppingToken);
+        }
+    }
 }

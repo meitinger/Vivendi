@@ -16,22 +16,22 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using System.Text.Json.Serialization;
+using System.Diagnostics.CodeAnalysis;
+using System.DirectoryServices.AccountManagement;
+using System.Security.Principal;
 
-namespace AufBauWerk.Vivendi.RemoteApp;
+namespace AufBauWerk.Vivendi.Syncer;
 
-[JsonSerializable(typeof(Request))]
-[JsonSerializable(typeof(Response))]
-internal partial class SerializerContext : JsonSerializerContext { }
-
-public class Request
+internal static class Extensions
 {
-    public Dictionary<Guid, string> KnownPaths { get; } = [];
-}
+    private static readonly SecurityIdentifier BuiltinAdministratorsSid = new(WellKnownSidType.BuiltinAdministratorsSid, null);
 
-public class Response
-{
-    public required string UserName { get; set; }
-    public required string Password { get; set; }
-    public required byte[] RdpFileContent { get; set; }
+    public static bool IsBuiltinAdministrator(this UserPrincipal user) => user.IsMemberOf(user.Context, IdentityType.Sid, BuiltinAdministratorsSid.Value);
+
+    [DoesNotReturn]
+    public static void LogExceptionAndExit(this ILogger logger, Exception ex)
+    {
+        logger.LogError(ex, "{Message}", ex.Message);
+        Environment.Exit(1);
+    }
 }

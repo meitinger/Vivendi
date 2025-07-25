@@ -18,11 +18,15 @@
 
 using Microsoft.Identity.Client;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace AufBauWerk.Vivendi.RemoteApp;
 
 internal static partial class Extensions
 {
+    [GeneratedRegex(@"^([a-zA-Z]):")]
+    private static partial Regex DriveLetter();
+
     public static async Task<AuthenticationResult?> AcquireTokenAsync(this IPublicClientApplication app, bool useCache, CancellationToken cancellationToken)
     {
         string[] scopes = [$"{Settings.Instance.ApplicationId}/.default"];
@@ -58,4 +62,6 @@ internal static partial class Extensions
         }
         return null;
     }
+
+    public static string ReplaceDriveWithTsClient(this string path) => DriveLetter().Replace(path, @"\\tsclient\$1");
 }

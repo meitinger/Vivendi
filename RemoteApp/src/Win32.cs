@@ -176,17 +176,16 @@ public static partial class Win32
 
     public static void ShowError(string message) => MessageBoxW(0, message, Settings.Instance.Title, MB.OK | MB.ICONERROR | MB.SETFOREGROUND);
 
-    public static unsafe Process StartRemoteApp(string userName, string password, string rdpFileContent)
+    public static unsafe Process StartRemoteApp(string userName, string password, byte[] rdpFileContent)
     {
         Marshal.ThrowExceptionForHR(CoCreateInstance(CLSID_MsRdpSessionManagerSingleUseClass, null, CLSCTX.LOCAL_SERVER, typeof(IMsRdpSessionManager).GUID, out void* managerPtr));
         try
         {
             IMsRdpSessionManager manager = ComInterfaceMarshaller<IMsRdpSessionManager>.ConvertToManaged(managerPtr) ?? throw new NullReferenceException();
             using (FileStream fileStream = new(Path.GetTempFileName(), FileMode.Create, FileAccess.Write, FileShare.Read, 4096, FileOptions.DeleteOnClose))
-            using (StreamWriter streamWriter = new(fileStream, Encoding.UTF8))
             {
-                streamWriter.Write(rdpFileContent);
-                streamWriter.Flush();
+                fileStream.Write(rdpFileContent);
+                fileStream.Flush();
                 manager.StartRemoteApplication([userName, password], [fileStream.Name], 0);
             }
             return Process.GetProcessById(manager.GetProcessId());
@@ -197,7 +196,7 @@ public static partial class Win32
         }
     }
 
-    public static bool TryGetKnownFolderPath(Guid knownFolderId, [NotNullWhen(true)] out string? path) => 0 <= SHGetKnownFolderPath(knownFolderId, KF_FLAG.DONT_VERIFY | KF_FLAG.NO_ALIAS | KF_FLAG.NO_PACKAGE_REDIRECTION, 0, out path) && string.IsNullOrWhiteSpace(path);
+    public static bool TryGetKnownFolderPath(Guid knownFolderId, [NotNullWhen(true)] out string? path) => 0 <= SHGetKnownFolderPath(knownFolderId, KF_FLAG.DONT_VERIFY | KF_FLAG.NO_ALIAS | KF_FLAG.NO_PACKAGE_REDIRECTION, 0, out path) && !string.IsNullOrEmpty(path);
 
     public static PublicClientApplicationBuilder WithDesktopAsParent(this PublicClientApplicationBuilder builder) => builder.WithParentActivityOrWindow(GetDesktopWindow);
 }

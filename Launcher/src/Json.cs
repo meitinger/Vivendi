@@ -21,9 +21,7 @@ using System.Text.Json.Serialization;
 namespace AufBauWerk.Vivendi.Launcher;
 
 [JsonSerializable(typeof(Credential))]
-internal partial class SerializerContext : JsonSerializerContext
-{
-}
+internal partial class SerializerContext : JsonSerializerContext { }
 
 public class Credential
 {

@@ -16,7 +16,7 @@
     <PublishAot>true</PublishAot>
     <RootNamespace>AufBauWerk.Vivendi.Launcher</RootNamespace>
     <TargetFramework>net9.0-windows</TargetFramework>
-    <Version>1.2.4.0</Version>
+    <Version>2.0.1.0</Version>
   </PropertyGroup>
 
 </Project>

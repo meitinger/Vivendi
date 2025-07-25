@@ -18,11 +18,20 @@
 
 namespace AufBauWerk.Vivendi.Gateway;
 
-public class Settings
+public class RdpFile
 {
-    public string ApplicationId { get; set; } = "";
-    public string ConnectionString { get; set; } = "";
-    public string RemoteAppQuery { get; set; } = "";
-    public string VivendiUserQuery { get; set; } = "";
-    public string TenantId { get; set; } = "";
+    private readonly string path = Path.Combine(AppContext.BaseDirectory, "vivendi.rdp");
+    private (DateTime, byte[])? cache = null;
+
+    public async Task<byte[]> GetContentAsync(CancellationToken cancellationToken)
+    {
+        DateTime time = File.GetLastWriteTimeUtc(path);
+        if (cache is (DateTime cacheTime, byte[] cacheContent) && time == cacheTime)
+        {
+            return cacheContent;
+        }
+        byte[] content = await File.ReadAllBytesAsync(path, cancellationToken);
+        cache = (time, content);
+        return content;
+    }
 }

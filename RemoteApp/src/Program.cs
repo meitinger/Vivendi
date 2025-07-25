@@ -54,9 +54,9 @@ try
     Request request = new();
     foreach (Guid knownFolderId in knownFolderIds)
     {
-        if (Win32.TryGetKnownFolderPath(knownFolderId, out string? path))
+        if (Win32.TryGetKnownFolderPath(knownFolderId, out string? path) && Path.IsPathFullyQualified(path))
         {
-            request.KnownPaths.Add(knownFolderId, path);
+            request.KnownPaths.Add(knownFolderId, path.ReplaceDriveWithTsClient());
         }
     }
 
@@ -69,7 +69,7 @@ try
     }
 
     // launch the remote app
-    using Process process = Win32.StartRemoteApp(response.Domain + @"\" + response.UserName, response.Password, response.RdpFileContent);
+    using Process process = Win32.StartRemoteApp(response.UserName, response.Password, response.RdpFileContent);
     process.WaitForExit();
     Environment.ExitCode = process.ExitCode;
 }

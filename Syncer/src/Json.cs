@@ -18,20 +18,26 @@
 
 using System.Text.Json.Serialization;
 
-namespace AufBauWerk.Vivendi.RemoteApp;
+namespace AufBauWerk.Vivendi.Syncer;
 
-[JsonSerializable(typeof(Request))]
-[JsonSerializable(typeof(Response))]
+[JsonSerializable(typeof(VivendiUser))]
+[JsonSerializable(typeof(ExternalUser))]
+[JsonSerializable(typeof(WindowsUser))]
 internal partial class SerializerContext : JsonSerializerContext { }
 
-public class Request
+internal class ExternalUser()
 {
-    public Dictionary<Guid, string> KnownPaths { get; } = [];
+    public required string UserName { get; set; }
 }
 
-public class Response
+internal class VivendiUser
 {
     public required string UserName { get; set; }
     public required string Password { get; set; }
-    public required byte[] RdpFileContent { get; set; }
+}
+
+internal class WindowsUser
+{
+    public required string UserName { get; set; }
+    public required string Password { get; set; }
 }

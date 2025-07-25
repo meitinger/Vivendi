@@ -1,28 +1,27 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk.Worker">
 
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <ApplicationIcon>res\RemoteApp.ico</ApplicationIcon>
     <Company>AufBauWerk - Unternehmen für junge Menschen</Company>
     <Copyright>Copyright (c) 2024 by Manuel Meitinger</Copyright>
-    <Description>Vivendi RemoteApp</Description>
+    <Description>Vivendi Syncer</Description>
     <ImplicitUsings>enable</ImplicitUsings>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <InvariantGlobalization>true</InvariantGlobalization>
     <Nullable>enable</Nullable>
-    <OutputType>winexe</OutputType>
+    <OutputType>exe</OutputType>
     <Product>AufBauWerk Erweiterungen für Vivendi</Product>
     <ProjectDir>src\</ProjectDir>
     <PublishAot>true</PublishAot>
-    <RootNamespace>AufBauWerk.Vivendi.RemoteApp</RootNamespace>
+    <RootNamespace>AufBauWerk.Vivendi.Syncer</RootNamespace>
     <TargetFramework>net9.0-windows</TargetFramework>
     <Version>2.0.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Identity.Client" Version="4.74.0" />
-    <PackageReference Include="Microsoft.Identity.Client.Broker" Version="4.74.0" />
-    <PackageReference Include="Microsoft.Identity.Client.Extensions.Msal" Version="4.74.0" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.2" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.7" />
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.7" />
+    <PackageReference Include="System.DirectoryServices.AccountManagement" Version="9.0.7" />
   </ItemGroup>
 
 </Project>

@@ -19,15 +19,18 @@
 using AufBauWerk.Vivendi.Launcher;
 using Microsoft.Win32;
 using System.Diagnostics;
-using System.Net.Http.Json;
+using System.IO.Pipes;
+using System.Security.Principal;
+using System.Text.Json;
 
 try
 {
-    const string registryPath = @"HKEY_LOCAL_MACHINE\SOFTWARE\Connext\Vivendi";
-    string launcherUrl = Registry.GetValue(registryPath, "LauncherUrl", null) as string ?? throw new UnauthorizedAccessException();
-    using HttpClient client = new(new HttpClientHandler() { UseDefaultCredentials = true });
-    Credential credential = (Credential?)await client.GetFromJsonAsync(launcherUrl, typeof(Credential), SerializerContext.Default) ?? throw new UnauthorizedAccessException();
-    string? path = Registry.GetValue(registryPath, "Path", null) as string;
+    const int timeout = 10000;
+    using NamedPipeClientStream stream = new(".", "VivendiLauncher", PipeDirection.In, PipeOptions.None, TokenImpersonationLevel.Identification, HandleInheritability.None) { ReadTimeout = timeout };
+    stream.Connect(timeout);
+    Credential credential = (Credential?)JsonSerializer.Deserialize(stream, typeof(Credential), SerializerContext.Default) ?? throw new UnauthorizedAccessException();
+    stream.Close();
+    string? path = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Connext\Vivendi", "Path", null) as string;
     using Process vivendi = Process.Start(Path.Combine(path ?? AppContext.BaseDirectory, "Vivendi.exe"));
     vivendi.SignIn(credential);
 }

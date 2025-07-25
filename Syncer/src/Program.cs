@@ -16,22 +16,19 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using System.Text.Json.Serialization;
+using AufBauWerk.Vivendi.Syncer;
+using Microsoft.Extensions.Logging.EventLog;
 
-namespace AufBauWerk.Vivendi.RemoteApp;
+HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
 
-[JsonSerializable(typeof(Request))]
-[JsonSerializable(typeof(Response))]
-internal partial class SerializerContext : JsonSerializerContext { }
+builder.Services
+    .AddSingleton<ILoggerProvider>(new EventLogLoggerProvider(new EventLogSettings() { SourceName = "Vivendi Syncer" }))
+    .AddWindowsService(options => options.ServiceName = "VivendiSyncer")
+    .AddSingleton<Database>()
+    .AddHostedService<HousekeepingService>()
+    .AddHostedService<LauncherService>()
+    .AddHostedService<RemoteAppService>();
 
-public class Request
-{
-    public Dictionary<Guid, string> KnownPaths { get; } = [];
-}
-
-public class Response
-{
-    public required string UserName { get; set; }
-    public required string Password { get; set; }
-    public required byte[] RdpFileContent { get; set; }
-}
+builder
+    .Build()
+    .Run();
