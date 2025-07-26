@@ -62,7 +62,7 @@ app.MapPost("/remoteapp", [Authorize] async (HttpContext context, RdpFile rdpFil
     byte[] rdpFileContent = await rdpFile.GetContentAsync(context.RequestAborted);
     using NamedPipeClientStream stream = new(".", "VivendiRemoteApp", PipeDirection.InOut, PipeOptions.Asynchronous, System.Security.Principal.TokenImpersonationLevel.Identification, HandleInheritability.None);
     await stream.ConnectAsync(timeout: 5000, context.RequestAborted);
-    await JsonSerializer.SerializeAsync(stream, new ExternalUser() { UserName = userName }, typeof(ExternalUser), SerializerContext.Default, context.RequestAborted);
+    await stream.WriteAsync(JsonSerializer.SerializeToUtf8Bytes(new ExternalUser() { UserName = userName }, typeof(ExternalUser), SerializerContext.Default), context.RequestAborted);
     WindowsUser? windowsUser = (WindowsUser?)await JsonSerializer.DeserializeAsync(stream, typeof(WindowsUser), SerializerContext.Default, context.RequestAborted);
     if (windowsUser is null) { return Results.Forbid(); }
     stream.Close();

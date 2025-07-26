@@ -18,6 +18,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using System.DirectoryServices.AccountManagement;
+using System.IO.Pipes;
 using System.Security.Principal;
 
 namespace AufBauWerk.Vivendi.Syncer;
@@ -39,5 +40,21 @@ internal static class Extensions
     {
         logger.LogError(ex, "{Message}", ex.Message);
         Environment.Exit(1);
+    }
+
+    public static async Task<MemoryStream> ReadMessageAsync(this PipeStream stream, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(timeout);
+        CancellationToken timedCancellationToken = cts.Token;
+        byte[] buffer = new byte[1024];
+        MemoryStream result = new();
+        do
+        {
+            int read = await stream.ReadAsync(buffer, timedCancellationToken);
+            result.Write(buffer, 0, read);
+        } while (!stream.IsMessageComplete);
+        result.Position = 0;
+        return result;
     }
 }

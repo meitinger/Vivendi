@@ -36,7 +36,7 @@ internal abstract class PipeService(string name, PipeDirection direction, ILogge
             PipeAccessRights clientRights = ((direction & PipeDirection.In) is not 0 ? PipeAccessRights.Write : 0) | ((direction & PipeDirection.Out) is not 0 ? PipeAccessRights.Read : 0);
             security.AddAccessRule(new(LocalSystemSid, PipeAccessRights.FullControl, AccessControlType.Allow));
             security.AddAccessRule(new(ClientIdentity, clientRights, AccessControlType.Allow));
-            using NamedPipeServerStream stream = NamedPipeServerStreamAcl.Create(name, direction, maxNumberOfServerInstances: 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous, inBufferSize: 1024, outBufferSize: 1024, security);
+            using NamedPipeServerStream stream = NamedPipeServerStreamAcl.Create(name, direction, maxNumberOfServerInstances: 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous, inBufferSize: 0, outBufferSize: 0, security);
             while (!stoppingToken.IsCancellationRequested)
             {
                 await stream.WaitForConnectionAsync(stoppingToken);
@@ -57,5 +57,5 @@ internal abstract class PipeService(string name, PipeDirection direction, ILogge
         catch (Exception ex) { logger.LogExceptionAndExit(ex); }
     }
 
-    protected abstract Task ExecuteAsync(Stream stream, string userName, CancellationToken stoppingToken);
+    protected abstract Task ExecuteAsync(PipeStream stream, string userName, CancellationToken stoppingToken);
 }

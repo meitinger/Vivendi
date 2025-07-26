@@ -24,6 +24,8 @@ namespace AufBauWerk.Vivendi.Syncer;
 
 internal class Settings(IConfiguration configuration)
 {
+    private static readonly char[] DefaultPasswordChars = [.. Enumerable.Range(33, 94).Select(i => (char)(ushort)i)];
+
     private static IdentityReference GetIdentity(string nameOrSid)
     {
         try
@@ -45,12 +47,15 @@ internal class Settings(IConfiguration configuration)
         _ => throw new InvalidOperationException(),
     };
 
-    private T Get<T>(T? defaultValue = default, [CallerMemberName] string name = "") => section.GetValue<T>(name) ?? defaultValue ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
+    private T Get<T>(T? defaultValue = default, [CallerMemberName] string name = "") => section.GetValue(name, defaultValue) ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
 
     public string ConnectionString => Get<string>();
-    public TimeSpan CleanupInterval => Get(TimeSpan.FromTicks(TimeSpan.TicksPerHour));
+    public TimeSpan CleanupInterval => Get(TimeSpan.FromHours(1));
+    public TimeSpan GatewayTimeout => Get(TimeSpan.FromSeconds(5));
     private string GatewayUser => Get<string>();
     public IdentityReference GatewayUserIdentity => GetIdentity(GatewayUser);
+    public char[] PasswordChars => Get(DefaultPasswordChars);
+    public int PasswordLength => Get(25);
     public string QueryString => Get<string>();
     private string SyncGroup => Get<string>();
     public IdentityReference SyncGroupIdentity => GetIdentity(SyncGroup);

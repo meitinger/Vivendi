@@ -18,6 +18,7 @@
 
 using System.IO.Pipes;
 using System.Security.Principal;
+using System.Text;
 using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
@@ -26,11 +27,11 @@ internal sealed class LauncherService(ILogger<LauncherService> logger, Settings 
 {
     protected override IdentityReference ClientIdentity => settings.SyncGroupIdentity;
 
-    protected override async Task ExecuteAsync(Stream stream, string userName, CancellationToken stoppingToken)
+    protected override async Task ExecuteAsync(PipeStream stream, string userName, CancellationToken stoppingToken)
     {
         if (await database.GetVivendiCredentialAsync(userName, stoppingToken) is Credential user)
         {
-            await JsonSerializer.SerializeAsync(stream, user, typeof(Credential), SerializerContext.Default, stoppingToken);
+            await stream.WriteAsync(JsonSerializer.SerializeToUtf8Bytes(user, typeof(Credential), SerializerContext.Default), stoppingToken);
         }
     }
 }
