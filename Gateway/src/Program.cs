@@ -19,14 +19,15 @@
 using AufBauWerk.Vivendi.Gateway;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.Extensions.Logging.Configuration;
 using Microsoft.Extensions.Logging.EventLog;
 using System.IO.Pipes;
 using System.Text.Json;
 
 WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(args);
+LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerProvider>(builder.Services);
 
 builder.Services
-    .AddSingleton<ILoggerProvider>(new EventLogLoggerProvider(new EventLogSettings() { SourceName = "Vivendi Gateway" }))
     .AddWindowsService(options => options.ServiceName = "VivendiGateway")
     .AddSingleton<RdpFile>();
 
@@ -34,9 +35,9 @@ builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options => // configure required AAD settings
     {
-        string GetConfig(string name) => builder.Configuration[name] ?? throw new ArgumentNullException(name);
-        string tenantId = GetConfig("TenantId");
-        string applicationId = GetConfig("ApplicationId");
+        string GetSetting(string name) => builder.Configuration[name] ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
+        string tenantId = GetSetting("TenantId");
+        string applicationId = GetSetting("ApplicationId");
         options.Authority = $"https://login.microsoftonline.com/{tenantId}";
         options.TokenValidationParameters = new()
         {
@@ -44,12 +45,14 @@ builder.Services
             ValidIssuers = [$"https://sts.windows.net/{tenantId}/", $"https://login.microsoftonline.com/{tenantId}/v2.0/"],
         };
     });
+builder.Services
+    .AddAuthorization();
 
 WebApplication app = builder.Build();
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/remoteapp", [Authorize] async (HttpContext context, RdpFile rdpFile) =>
+app.MapPost("/remoteapp", [Authorize] async (HttpContext context, RdpFile rdpFile) =>
 {
     if (context.User?.Identity?.Name is not string userName) { return Results.Forbid(); }
     RemoteAppRequest? request = (RemoteAppRequest?)await context.Request.ReadFromJsonAsync(typeof(RemoteAppRequest), SerializerContext.Default, context.RequestAborted);
@@ -57,15 +60,9 @@ app.MapGet("/remoteapp", [Authorize] async (HttpContext context, RdpFile rdpFile
     if (request.KnownPaths.Values.Any(Path.IsPathFullyQualified)) { return Results.BadRequest(); }
     if (!request.KnownPaths.Keys.All(KnownFolders.IsAllowed)) { return Results.BadRequest(); }
     byte[] rdpFileContent = await rdpFile.GetContentAsync(context.RequestAborted);
-    const int timeout = 10000;
-    using NamedPipeClientStream stream = new(".", "VivendiRemoteApp", PipeDirection.InOut, PipeOptions.Asynchronous, System.Security.Principal.TokenImpersonationLevel.Identification, HandleInheritability.None)
-    {
-        ReadTimeout = timeout,
-        WriteTimeout = timeout,
-    };
-    await stream.ConnectAsync(timeout, context.RequestAborted);
+    using NamedPipeClientStream stream = new(".", "VivendiRemoteApp", PipeDirection.InOut, PipeOptions.Asynchronous, System.Security.Principal.TokenImpersonationLevel.Identification, HandleInheritability.None);
+    await stream.ConnectAsync(timeout: 5000, context.RequestAborted);
     await JsonSerializer.SerializeAsync(stream, new ExternalUser() { UserName = userName }, typeof(ExternalUser), SerializerContext.Default, context.RequestAborted);
-    await stream.FlushAsync(context.RequestAborted);
     WindowsUser? windowsUser = (WindowsUser?)await JsonSerializer.DeserializeAsync(stream, typeof(WindowsUser), SerializerContext.Default, context.RequestAborted);
     if (windowsUser is null) { return Results.Forbid(); }
     stream.Close();

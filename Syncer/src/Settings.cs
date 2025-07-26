@@ -22,7 +22,7 @@ using System.Security.Principal;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal class Configuration(IConfiguration configuration)
+internal class Settings(IConfiguration configuration)
 {
     private static IdentityReference GetIdentity(string nameOrSid)
     {
@@ -36,6 +36,8 @@ internal class Configuration(IConfiguration configuration)
         }
     }
 
+    private readonly IConfigurationSection section = configuration.GetRequiredSection("Syncer");
+
     private static T GetPrincipal<T>(Func<PrincipalContext, IdentityType, string, T> find, PrincipalContext context, string nameOrSid) => GetIdentity(nameOrSid) switch
     {
         SecurityIdentifier sid => find(context, IdentityType.Sid, sid.Value),
@@ -43,15 +45,16 @@ internal class Configuration(IConfiguration configuration)
         _ => throw new InvalidOperationException(),
     };
 
-    private string Get([CallerMemberName] string name = "") => configuration[name] is string value && 0 < value.Length ? value : throw new ArgumentNullException(name);
+    private T Get<T>(T? defaultValue = default, [CallerMemberName] string name = "") => section.GetValue<T>(name) ?? defaultValue ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
 
-    public string ConnectionString => Get();
-    private string GatewayUser => Get();
-    public string QueryString => Get();
-    private string SyncGroup => Get();
-    public string UserDescription => Get();
+    public string ConnectionString => Get<string>();
+    public TimeSpan CleanupInterval => Get(TimeSpan.FromTicks(TimeSpan.TicksPerHour));
+    private string GatewayUser => Get<string>();
+    public IdentityReference GatewayUserIdentity => GetIdentity(GatewayUser);
+    public string QueryString => Get<string>();
+    private string SyncGroup => Get<string>();
+    public IdentityReference SyncGroupIdentity => GetIdentity(SyncGroup);
+    public string UserDescription => Get("");
 
-    public IdentityReference GetGatewayUserIdentity() => GetIdentity(GatewayUser);
-    public GroupPrincipal GetSyncGroupPrincipal(PrincipalContext context) => GetPrincipal(GroupPrincipal.FindByIdentity, context, SyncGroup);
-    public IdentityReference GetSyncGroupIdentity() => GetIdentity(SyncGroup);
+    public GroupPrincipal FindSyncGroup(PrincipalContext context) => GetPrincipal(GroupPrincipal.FindByIdentity, context, SyncGroup) ?? throw new NoMatchingPrincipalException();
 }

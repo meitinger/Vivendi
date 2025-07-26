@@ -21,11 +21,10 @@ using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
-using System.Text;
 
 namespace AufBauWerk.Vivendi.RemoteApp;
 
-public static partial class Win32
+internal static partial class Win32
 {
     [CustomMarshaller(typeof(string[]), MarshalMode.Default, typeof(BStrSafeArrayMarshaller))]
     internal static class BStrSafeArrayMarshaller

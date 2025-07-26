@@ -23,7 +23,7 @@ using Microsoft.Extensions.Logging.EventLog;
 WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerProvider>(builder.Services);
 builder.Services
-    .Configure<Settings>(builder.Configuration.GetSection("OlatAuth"))
+    .Configure<Settings>(builder.Configuration.GetRequiredSection("OlatAuth"))
     .AddWindowsService(options => options.ServiceName = "VivendiOlatAuth")
     .AddControllers();
 WebApplication app = builder.Build();

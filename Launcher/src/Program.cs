@@ -25,13 +25,17 @@ using System.Text.Json;
 
 try
 {
+    string? path = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Connext\Vivendi", "Path", null) as string;
+    using Process vivendi = Process.Start(Path.Combine(path ?? AppContext.BaseDirectory, "Vivendi.exe"));
     const int timeout = 10000;
-    using NamedPipeClientStream stream = new(".", "VivendiLauncher", PipeDirection.In, PipeOptions.None, TokenImpersonationLevel.Identification, HandleInheritability.None) { ReadTimeout = timeout };
+    using NamedPipeClientStream stream = new(".", "VivendiLauncher", PipeDirection.In, PipeOptions.None, TokenImpersonationLevel.Identification, HandleInheritability.None)
+    {
+        ReadTimeout = timeout,
+        WriteTimeout = timeout,
+    };
     stream.Connect(timeout);
     Credential credential = (Credential?)JsonSerializer.Deserialize(stream, typeof(Credential), SerializerContext.Default) ?? throw new UnauthorizedAccessException();
     stream.Close();
-    string? path = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Connext\Vivendi", "Path", null) as string;
-    using Process vivendi = Process.Start(Path.Combine(path ?? AppContext.BaseDirectory, "Vivendi.exe"));
     vivendi.SignIn(credential);
 }
 catch (Exception ex)

@@ -45,7 +45,6 @@ internal abstract class PipeService(string name, PipeDirection direction, ILogge
                 {
                     userName = stream.GetImpersonationUserName();
                     await ExecuteAsync(stream, userName, stoppingToken);
-                    await stream.FlushAsync(stoppingToken);
                 }
                 catch (IOException ex)
                 {

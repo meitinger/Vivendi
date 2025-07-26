@@ -20,24 +20,17 @@ using System.Text.Json.Serialization;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-[JsonSerializable(typeof(VivendiUser))]
+[JsonSerializable(typeof(Credential))]
 [JsonSerializable(typeof(ExternalUser))]
-[JsonSerializable(typeof(WindowsUser))]
 internal partial class SerializerContext : JsonSerializerContext { }
 
-internal class ExternalUser()
-{
-    public required string UserName { get; set; }
-}
-
-internal class VivendiUser
+internal class Credential
 {
     public required string UserName { get; set; }
     public required string Password { get; set; }
 }
 
-internal class WindowsUser
+internal class ExternalUser
 {
     public required string UserName { get; set; }
-    public required string Password { get; set; }
 }

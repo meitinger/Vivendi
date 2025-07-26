@@ -18,7 +18,7 @@
 
 namespace AufBauWerk.Vivendi.RemoteApp;
 
-public interface ISettings
+internal interface ISettings
 {
     string ApplicationId { get; }
     Uri EndpointUri { get; }
@@ -26,7 +26,7 @@ public interface ISettings
     string Title { get; }
 }
 
-public partial class Settings : ISettings
+internal partial class Settings : ISettings
 {
     public static Settings Instance { get; } = new();
 }

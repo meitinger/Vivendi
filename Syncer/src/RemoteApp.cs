@@ -23,22 +23,23 @@ using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal sealed class RemoteAppService(ILogger<LauncherService> logger, Configuration config) : PipeService("VivendiRemoteApp", PipeDirection.InOut, logger)
+internal sealed class RemoteAppService(ILogger<LauncherService> logger, Settings settings) : PipeService("VivendiRemoteApp", PipeDirection.InOut, logger)
 {
+    private static readonly SecurityIdentifier BuiltinRemoteDesktopUsersSid = new(WellKnownSidType.BuiltinRemoteDesktopUsersSid, null);
     private static readonly char[] PasswordChars = [.. Enumerable.Range(33, 94).Select(i => (char)(ushort)i)];
     private const int PasswordLength = 25;
 
     private void SetUserProperties(UserPrincipal user, ExternalUser externalUser)
     {
         user.AccountExpirationDate = DateTime.Now + TimeSpan.FromTicks(TimeSpan.TicksPerMinute);
-        user.Description = config.UserDescription;
+        user.Description = settings.UserDescription;
         user.DisplayName = externalUser.UserName;
         user.PasswordNeverExpires = true;
         user.PasswordNotRequired = false;
         user.UserCannotChangePassword = true;
     }
 
-    protected override IdentityReference ClientIdentity => config.GetGatewayUserIdentity();
+    protected override IdentityReference ClientIdentity => settings.GatewayUserIdentity;
 
     protected override async Task ExecuteAsync(Stream stream, string _, CancellationToken stoppingToken)
     {
@@ -49,7 +50,8 @@ internal sealed class RemoteAppService(ILogger<LauncherService> logger, Configur
             if (-1 < separator) { userName = userName[..separator]; }
             string password = new(Random.Shared.GetItems(PasswordChars, PasswordLength));
             using PrincipalContext context = new(ContextType.Machine);
-            using GroupPrincipal group = config.GetSyncGroupPrincipal(context);
+            using GroupPrincipal group = settings.FindSyncGroup(context);
+            using GroupPrincipal rdpUsers = GroupPrincipal.FindByIdentity(context, IdentityType.Sid, BuiltinRemoteDesktopUsersSid.Value);
             UserPrincipal? user = null;
             try
             {
@@ -59,27 +61,38 @@ internal sealed class RemoteAppService(ILogger<LauncherService> logger, Configur
                     user = new(context, samAccountName: userName, password, enabled: true);
                     SetUserProperties(user, externalUser);
                     user.Save();
+                    try
+                    {
+                        group.Members.Add(user);
+                        group.Save();
+                        rdpUsers.Members.Add(user);
+                        rdpUsers.Save();
+                    }
+                    catch (PrincipalException)
+                    {
+                        user.Delete();
+                        throw;
+                    }
                     logger.LogInformation("{User} created.", user.Name);
                 }
-                else
+                else if (user.IsMemberOf(group))
                 {
-                    if (user.IsBuiltinAdministrator() || (!user.IsMemberOf(group) && user.Description != config.UserDescription))
-                    {
-                        throw new UnauthorizedAccessException();
-                    }
+                    user.EnsureNotAdministrator();
                     Sessions.DisconnectForUser(user, wait: true);
                     user.SetPassword(password);
                     user.Enabled = true;
                     SetUserProperties(user, externalUser);
                     user.Save();
                 }
-                if (!user.IsMemberOf(group))
+                else
                 {
-                    group.Members.Add(user);
-                    group.Save();
-                    logger.LogInformation("{User} added to {Group}.", user.Name, group.Name);
+                    throw new PrincipalOperationException("Not allowed for unsynced users.");
                 }
-                await JsonSerializer.SerializeAsync(stream, new WindowsUser() { UserName = userName, Password = password }, typeof(WindowsUser), SerializerContext.Default, stoppingToken);
+                await JsonSerializer.SerializeAsync(stream, new Credential() { UserName = userName, Password = password }, typeof(Credential), SerializerContext.Default, stoppingToken);
+            }
+            catch (PrincipalException ex)
+            {
+                logger.LogWarning(ex, "{User}: {Message}", userName, ex.Message);
             }
             finally
             {

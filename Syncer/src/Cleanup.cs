@@ -20,7 +20,7 @@ using System.DirectoryServices.AccountManagement;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal sealed class HousekeepingService(ILogger<LauncherService> logger, Configuration config, Database db) : BackgroundService
+internal sealed class CleanupService(ILogger<LauncherService> logger, Settings settings, Database database) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -29,16 +29,13 @@ internal sealed class HousekeepingService(ILogger<LauncherService> logger, Confi
             while (!stoppingToken.IsCancellationRequested)
             {
                 using PrincipalContext context = new(ContextType.Machine);
-                using GroupPrincipal group = config.GetSyncGroupPrincipal(context);
+                using GroupPrincipal group = settings.FindSyncGroup(context);
                 foreach (UserPrincipal user in group.GetMembers().OfType<UserPrincipal>())
                 {
                     try
                     {
-                        if (user.IsBuiltinAdministrator())
-                        {
-                            throw new UnauthorizedAccessException();
-                        }
-                        if (await db.GetVivendiUserAsync(user.Name, stoppingToken) is null)
+                        user.EnsureNotAdministrator();
+                        if (await database.GetVivendiCredentialAsync(user.Name, stoppingToken) is null)
                         {
                             user.Delete();
                             logger.LogInformation("{User} deleted.", user.Name);
@@ -49,6 +46,7 @@ internal sealed class HousekeepingService(ILogger<LauncherService> logger, Confi
                         logger.LogWarning(ex, "{User}: {Message}", user.Name, ex.Message);
                     }
                 }
+                await Task.Delay(settings.CleanupInterval, stoppingToken);
             }
         }
         catch (OperationCanceledException ex) when (ex.CancellationToken == stoppingToken) { }

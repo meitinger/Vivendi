@@ -18,6 +18,7 @@
 
 using System.ComponentModel;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 
 namespace AufBauWerk.Vivendi.Gateway;
 
@@ -62,6 +63,9 @@ internal static unsafe partial class KnownFolders
         new ("18989B1D-99B5-455B-841C-AB7C74E4DDFC"), //Videos
     ];
 
+    [GeneratedRegex(@"^([a-zA-Z]):")]
+    private static partial Regex GetDriveLetterRegex();
+
     public static bool IsAllowed(Guid knownFolderId) => AllowedIds.Contains(knownFolderId);
 
     public static void RedirectForUser(WindowsUser user, IReadOnlyDictionary<Guid, string> redirects)
@@ -75,7 +79,11 @@ internal static unsafe partial class KnownFolders
             }
             foreach (Guid knownFolderId in AllowedIds)
             {
-                if (!redirects.TryGetValue(knownFolderId, out string? path))
+                if (redirects.TryGetValue(knownFolderId, out string? path))
+                {
+                    path = GetDriveLetterRegex().Replace(path, @"\\tsclient\$1");
+                }
+                else
                 {
                     Marshal.ThrowExceptionForHR(SHGetKnownFolderPath(knownFolderId, KNOWN_FOLDER_FLAG.DONT_VERIFY | KNOWN_FOLDER_FLAG.DEFAULT_PATH | KNOWN_FOLDER_FLAG.NOT_PARENT_RELATIVE, token, out path));
                     if (path is null) { continue; }

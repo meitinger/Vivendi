@@ -91,14 +91,18 @@ internal static unsafe partial class Sessions
                 throw new Win32Exception();
             }
             uint size = 0;
-            GetTokenInformation(token, TOKEN_INFORMATION_CLASS.TokenUser, null, 0, &size);
-            if (Marshal.GetLastWin32Error() is not ERROR_BAD_LENGTH or ERROR_INSUFFICIENT_BUFFER)
-            {
-                throw new Win32Exception();
-            }
+        Resize:
             byte[] buffer = new byte[size];
             fixed (byte* ptr = buffer)
             {
+                if (!GetTokenInformation(token, TOKEN_INFORMATION_CLASS.TokenUser, null, 0, &size))
+                {
+                    if (Marshal.GetLastWin32Error() is not ERROR_BAD_LENGTH or ERROR_INSUFFICIENT_BUFFER || size <= buffer.Length)
+                    {
+                        throw new Win32Exception();
+                    }
+                    goto Resize;
+                }
                 if (!GetTokenInformation(token, TOKEN_INFORMATION_CLASS.TokenUser, ptr, size, &size))
                 {
                     throw new Win32Exception();

@@ -24,12 +24,12 @@ namespace AufBauWerk.Vivendi.RemoteApp;
 [JsonSerializable(typeof(Response))]
 internal partial class SerializerContext : JsonSerializerContext { }
 
-public class Request
+internal class Request
 {
-    public Dictionary<Guid, string> KnownPaths { get; } = [];
+    public required Dictionary<Guid, string> KnownPaths { get; set; }
 }
 
-public class Response
+internal class Response
 {
     public required string UserName { get; set; }
     public required string Password { get; set; }

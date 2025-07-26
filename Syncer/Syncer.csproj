@@ -11,9 +11,8 @@
     <OutputType>exe</OutputType>
     <Product>AufBauWerk Erweiterungen für Vivendi</Product>
     <ProjectDir>src\</ProjectDir>
-    <PublishAot>true</PublishAot>
     <RootNamespace>AufBauWerk.Vivendi.Syncer</RootNamespace>
-    <TargetFramework>net9.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows</TargetFramework>
     <Version>2.0.1.0</Version>
   </PropertyGroup>
 

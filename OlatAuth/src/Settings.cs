@@ -24,9 +24,9 @@ namespace AufBauWerk.Vivendi.OlatAuth;
 public class Settings
 {
     public string AuthProvider { get; set; } = "TOCCO";
-    public string ConnectionString { get; set; } = "";
-    public NetworkCredential Credentials { get; set; } = new();
-    public string LogonUserQuery { get; set; } = "";
+    public required string ConnectionString { get; set; }
+    public required NetworkCredential Credentials { get; set; }
+    public required string LogonUserQuery { get; set; }
     public Size MaxPortraitSize { get; set; } = new(100, 100);
-    public Uri? RestApiEndpoint { get; set; }
+    public required Uri RestApiEndpoint { get; set; }
 }

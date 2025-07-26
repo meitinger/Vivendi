@@ -22,15 +22,15 @@ using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal sealed class LauncherService(ILogger<LauncherService> logger, Configuration config, Database db) : PipeService("VivendiLauncher", PipeDirection.Out, logger)
+internal sealed class LauncherService(ILogger<LauncherService> logger, Settings settings, Database database) : PipeService("VivendiLauncher", PipeDirection.Out, logger)
 {
-    protected override IdentityReference ClientIdentity => config.GetSyncGroupIdentity();
+    protected override IdentityReference ClientIdentity => settings.SyncGroupIdentity;
 
     protected override async Task ExecuteAsync(Stream stream, string userName, CancellationToken stoppingToken)
     {
-        if (await db.GetVivendiUserAsync(userName, stoppingToken) is VivendiUser user)
+        if (await database.GetVivendiCredentialAsync(userName, stoppingToken) is Credential user)
         {
-            await JsonSerializer.SerializeAsync(stream, user, typeof(VivendiUser), SerializerContext.Default, stoppingToken);
+            await JsonSerializer.SerializeAsync(stream, user, typeof(Credential), SerializerContext.Default, stoppingToken);
         }
     }
 }

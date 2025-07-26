@@ -21,12 +21,12 @@ using System.Data;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal class Database(Configuration configuration)
+internal class Database(Settings settings)
 {
-    public async Task<VivendiUser?> GetVivendiUserAsync(string userName, CancellationToken cancellationToken)
+    public async Task<Credential?> GetVivendiCredentialAsync(string userName, CancellationToken cancellationToken)
     {
-        using SqlConnection connection = new(configuration.ConnectionString);
-        using SqlCommand command = new(configuration.QueryString, connection);
+        using SqlConnection connection = new(settings.ConnectionString);
+        using SqlCommand command = new(settings.QueryString, connection);
         await connection.OpenAsync(cancellationToken);
         command.Parameters.AddWithValue("@UserName", userName);
         using SqlDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SingleRow, cancellationToken);

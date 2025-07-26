@@ -26,7 +26,13 @@ internal static class Extensions
 {
     private static readonly SecurityIdentifier BuiltinAdministratorsSid = new(WellKnownSidType.BuiltinAdministratorsSid, null);
 
-    public static bool IsBuiltinAdministrator(this UserPrincipal user) => user.IsMemberOf(user.Context, IdentityType.Sid, BuiltinAdministratorsSid.Value);
+    public static void EnsureNotAdministrator(this UserPrincipal user)
+    {
+        if (user.IsMemberOf(user.Context, IdentityType.Sid, BuiltinAdministratorsSid.Value))
+        {
+            throw new PrincipalOperationException("Operation not allowed for administrators.");
+        }
+    }
 
     [DoesNotReturn]
     public static void LogExceptionAndExit(this ILogger logger, Exception ex)

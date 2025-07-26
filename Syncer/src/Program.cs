@@ -17,15 +17,17 @@
  */
 
 using AufBauWerk.Vivendi.Syncer;
+using Microsoft.Extensions.Logging.Configuration;
 using Microsoft.Extensions.Logging.EventLog;
 
 HostApplicationBuilder builder = Host.CreateApplicationBuilder(args);
+LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerProvider>(builder.Services);
 
 builder.Services
-    .AddSingleton<ILoggerProvider>(new EventLogLoggerProvider(new EventLogSettings() { SourceName = "Vivendi Syncer" }))
     .AddWindowsService(options => options.ServiceName = "VivendiSyncer")
     .AddSingleton<Database>()
-    .AddHostedService<HousekeepingService>()
+    .AddSingleton<Settings>()
+    .AddHostedService<CleanupService>()
     .AddHostedService<LauncherService>()
     .AddHostedService<RemoteAppService>();
 
