@@ -26,6 +26,8 @@ LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerPr
 builder.Services
     .AddWindowsService(options => options.ServiceName = "VivendiSyncer")
     .AddSingleton<Database>()
+    .AddSingleton<KnownFolders>()
+    .AddSingleton<Sessions>()
     .AddSingleton<Settings>()
     .AddHostedService<CleanupService>()
     .AddHostedService<LauncherService>()

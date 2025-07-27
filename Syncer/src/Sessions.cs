@@ -23,7 +23,7 @@ using System.Security.Principal;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal static unsafe partial class Sessions
+internal unsafe partial class Sessions(ILogger<Sessions> logger)
 {
     #region Win32
 
@@ -80,15 +80,17 @@ internal static unsafe partial class Sessions
 
     #endregion
 
-    private static SecurityIdentifier GetSidFromSession(uint sessionId)
+    private static void ThrowExceptionForWin32(bool success)
+    {
+        if (!success) { throw new Win32Exception(); }
+    }
+
+    private SecurityIdentifier GetSidFromSession(uint sessionId)
     {
         nint token = 0;
         try
         {
-            if (!WTSQueryUserToken(sessionId, &token))
-            {
-                throw new Win32Exception();
-            }
+            ThrowExceptionForWin32(WTSQueryUserToken(sessionId, &token));
             uint size = 100;
         Resize:
             byte[] buffer = new byte[size];
@@ -96,10 +98,7 @@ internal static unsafe partial class Sessions
             {
                 if (!GetTokenInformation(token, TOKEN_INFORMATION_CLASS.TokenUser, ptr, size, &size))
                 {
-                    if (Marshal.GetLastWin32Error() is not ERROR_INSUFFICIENT_BUFFER || size <= buffer.Length)
-                    {
-                        throw new Win32Exception();
-                    }
+                    ThrowExceptionForWin32(Marshal.GetLastPInvokeError() is ERROR_INSUFFICIENT_BUFFER && buffer.Length < size);
                     goto Resize;
                 }
                 return new SecurityIdentifier(buffer, (int)(((TOKEN_USER*)ptr)->User.Sid - ptr));
@@ -109,21 +108,21 @@ internal static unsafe partial class Sessions
         {
             if (token is not 0)
             {
-                CloseHandle(token);
+                if (!CloseHandle(token))
+                {
+                    logger.LogWarning("Release user token for session #{SessionId} failed: {Message}", sessionId, Marshal.GetLastPInvokeErrorMessage());
+                }
             }
         }
     }
 
-    public static void DisconnectForUser(UserPrincipal user, bool wait)
+    public void DisconnectForUser(UserPrincipal user, bool wait)
     {
         WTS_SESSION_INFOW* sessionInfos = null;
         uint count = 0;
         try
         {
-            if (!WTSEnumerateSessionsW(WTS_CURRENT_SERVER_HANDLE, reserved: 0, version: 1, &sessionInfos, &count))
-            {
-                throw new Win32Exception();
-            }
+            ThrowExceptionForWin32(WTSEnumerateSessionsW(WTS_CURRENT_SERVER_HANDLE, reserved: 0, version: 1, &sessionInfos, &count));
             for (uint i = 0; i < count; i++)
             {
                 WTS_SESSION_INFOW sessionInfo = sessionInfos[i];
@@ -131,10 +130,7 @@ internal static unsafe partial class Sessions
                 {
                     continue;
                 }
-                if (!WTSDisconnectSession(WTS_CURRENT_SERVER_HANDLE, sessionInfo.SessionId, wait))
-                {
-                    throw new Win32Exception();
-                }
+                ThrowExceptionForWin32(WTSDisconnectSession(WTS_CURRENT_SERVER_HANDLE, sessionInfo.SessionId, wait));
             }
         }
         finally

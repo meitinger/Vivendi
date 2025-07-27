@@ -21,8 +21,11 @@ namespace AufBauWerk.Vivendi.RemoteApp;
 internal interface ISettings
 {
     string ApplicationId { get; }
+    string CacheDirectory { get; }
+    string CacheFileName { get; }
     Uri EndpointUri { get; }
     string TenantId { get; }
+    TimeSpan Timeout { get; }
     string Title { get; }
 }
 

@@ -49,8 +49,8 @@ internal class Settings(IConfiguration configuration)
 
     private T Get<T>(T? defaultValue = default, [CallerMemberName] string name = "") => section.GetValue(name, defaultValue) ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
 
-    public string ConnectionString => Get<string>();
     public TimeSpan CleanupInterval => Get(TimeSpan.FromHours(1));
+    public string ConnectionString => Get<string>();
     public TimeSpan GatewayTimeout => Get(TimeSpan.FromSeconds(5));
     private string GatewayUser => Get<string>();
     public IdentityReference GatewayUserIdentity => GetIdentity(GatewayUser);

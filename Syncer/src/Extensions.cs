@@ -31,7 +31,7 @@ internal static class Extensions
     {
         if (user.IsMemberOf(user.Context, IdentityType.Sid, BuiltinAdministratorsSid.Value))
         {
-            throw new PrincipalOperationException("Operation not allowed for administrators.");
+            throw new PrincipalOperationException("Operation not allowed on Administrator accounts.");
         }
     }
 

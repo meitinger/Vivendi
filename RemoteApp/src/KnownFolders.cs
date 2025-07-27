@@ -16,10 +16,27 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+using System.Runtime.InteropServices;
+
 namespace AufBauWerk.Vivendi.RemoteApp;
 
-internal static class KnownFolders
+internal static partial class KnownFolders
 {
+    #region Win32
+
+    [Flags]
+    private enum KF_FLAG
+    {
+        DONT_VERIFY = 0x00004000,
+        NO_ALIAS = 0x00001000,
+        NO_PACKAGE_REDIRECTION = 0x00010000,
+    }
+
+    [LibraryImport("shell32.dll", StringMarshalling = StringMarshalling.Utf16)]
+    private static unsafe partial int SHGetKnownFolderPath(in Guid id, KF_FLAG flags, nint token, out string? path);
+
+    #endregion
+
     private static readonly HashSet<Guid> AllowedIds =
     [
         new("FDD39AD0-238F-46AF-ADB4-6C85480369C7"), //Documents
@@ -35,7 +52,7 @@ internal static class KnownFolders
         Dictionary<Guid, string> paths = [];
         foreach (Guid knownFolderId in AllowedIds)
         {
-            if (Win32.TryGetKnownFolderPath(knownFolderId, out string? path) && Path.IsPathFullyQualified(path))
+            if (0 <= SHGetKnownFolderPath(knownFolderId, KF_FLAG.DONT_VERIFY | KF_FLAG.NO_ALIAS | KF_FLAG.NO_PACKAGE_REDIRECTION, 0, out string? path) && path is not null && Path.IsPathFullyQualified(path))
             {
                 paths.Add(knownFolderId, path);
             }

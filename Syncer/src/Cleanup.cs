@@ -35,15 +35,15 @@ internal sealed class CleanupService(ILogger<LauncherService> logger, Settings s
                     try
                     {
                         user.EnsureNotAdministrator();
-                        if (await database.GetVivendiCredentialAsync(user.Name, stoppingToken) is null)
+                        if (await database.IsVivendiUserAsync(user.Name, stoppingToken))
                         {
                             user.Delete();
-                            logger.LogInformation("{User} deleted.", user.Name);
+                            logger.LogInformation("User '{User}' deleted.", user.Name);
                         }
                     }
                     catch (Exception ex)
                     {
-                        logger.LogWarning(ex, "{User}: {Message}", user.Name, ex.Message);
+                        logger.LogWarning(ex, "Maintenance for user '{User}' failed: {Message}", user.Name, ex.Message);
                     }
                 }
                 await Task.Delay(settings.CleanupInterval, stoppingToken);

@@ -20,20 +20,32 @@ using System.Text.Json.Serialization;
 
 namespace AufBauWerk.Vivendi.Gateway;
 
-[JsonSerializable(typeof(RemoteAppRequest))]
-[JsonSerializable(typeof(RemoteAppResponse))]
+[JsonSerializable(typeof(Credential))]
 [JsonSerializable(typeof(ExternalUser))]
-[JsonSerializable(typeof(WindowsUser))]
+[JsonSerializable(typeof(Request))]
+[JsonSerializable(typeof(Response))]
 internal partial class SerializerContext : JsonSerializerContext { }
 
-public class RemoteAppRequest
+internal class Credential
 {
-    public Dictionary<Guid, string> KnownPaths { get; } = [];
+    public required string UserName { get; set; }
+    public required string Password { get; set; }
 }
 
-public class RemoteAppResponse
+internal class ExternalUser
 {
-    public static RemoteAppResponse Build(WindowsUser windowsUser, byte[] rdpFileContent) => new()
+    public required string UserName { get; set; }
+    public required Dictionary<Guid, string> KnownPaths { get; set; }
+}
+
+internal class Request
+{
+    public required Dictionary<Guid, string> KnownPaths { get; set; }
+}
+
+internal class Response
+{
+    public static Response Build(Credential windowsUser, byte[] rdpFileContent) => new()
     {
         UserName = windowsUser.UserName,
         Password = windowsUser.Password,
@@ -43,15 +55,4 @@ public class RemoteAppResponse
     public required string UserName { get; set; }
     public required string Password { get; set; }
     public required byte[] RdpFileContent { get; set; }
-}
-
-public class ExternalUser
-{
-    public required string UserName { get; set; }
-}
-
-public class WindowsUser
-{
-    public required string UserName { get; set; }
-    public required string Password { get; set; }
 }

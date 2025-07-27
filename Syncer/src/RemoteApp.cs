@@ -23,18 +23,31 @@ using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal sealed class RemoteAppService(ILogger<LauncherService> logger, Settings settings) : PipeService("VivendiRemoteApp", PipeDirection.InOut, logger)
+internal sealed class RemoteAppService(ILogger<LauncherService> logger, Settings settings, Database database, KnownFolders knownFolders, Sessions sessions) : PipeService("VivendiRemoteApp", PipeDirection.InOut, logger)
 {
     private static readonly SecurityIdentifier BuiltinRemoteDesktopUsersSid = new(WellKnownSidType.BuiltinRemoteDesktopUsersSid, null);
 
-    private void SetUserProperties(UserPrincipal user, ExternalUser externalUser)
+    private bool UpdateUserProperties(UserPrincipal user, ExternalUser externalUser, bool checkIfNeeded)
     {
         user.AccountExpirationDate = DateTime.Now + TimeSpan.FromTicks(TimeSpan.TicksPerMinute);
+        if (checkIfNeeded)
+        {
+            bool changed =
+                user.Enabled is true &&
+                user.Description == settings.UserDescription &&
+                user.DisplayName == externalUser.UserName &&
+                user.PasswordNeverExpires is true &&
+                user.PasswordNotRequired is false &&
+                user.UserCannotChangePassword is true;
+            if (!changed) { return false; }
+        }
+        user.Enabled = true;
         user.Description = settings.UserDescription;
         user.DisplayName = externalUser.UserName;
         user.PasswordNeverExpires = true;
         user.PasswordNotRequired = false;
         user.UserCannotChangePassword = true;
+        return true;
     }
 
     protected override IdentityReference ClientIdentity => settings.GatewayUserIdentity;
@@ -47,6 +60,7 @@ internal sealed class RemoteAppService(ILogger<LauncherService> logger, Settings
             string userName = externalUser.UserName;
             int separator = userName.LastIndexOf('@');
             if (-1 < separator) { userName = userName[..separator]; }
+            if (!await database.IsVivendiUserAsync(userName, stoppingToken)) { return; }
             string password = new(Random.Shared.GetItems(settings.PasswordChars, settings.PasswordLength));
             using PrincipalContext context = new(ContextType.Machine);
             using GroupPrincipal group = settings.FindSyncGroup(context);
@@ -58,7 +72,7 @@ internal sealed class RemoteAppService(ILogger<LauncherService> logger, Settings
                 if (user is null)
                 {
                     user = new(context, samAccountName: userName, password, enabled: true);
-                    SetUserProperties(user, externalUser);
+                    UpdateUserProperties(user, externalUser, checkIfNeeded: false);
                     user.Save();
                     try
                     {
@@ -67,31 +81,36 @@ internal sealed class RemoteAppService(ILogger<LauncherService> logger, Settings
                         rdpUsers.Members.Add(user);
                         rdpUsers.Save();
                     }
-                    catch (PrincipalException)
+                    catch
                     {
                         user.Delete();
                         throw;
                     }
-                    logger.LogInformation("{User} created.", user.Name);
+                    logger.LogInformation("User '{User}' created.", user.Name);
                 }
                 else if (user.IsMemberOf(group))
                 {
                     user.EnsureNotAdministrator();
-                    Sessions.DisconnectForUser(user, wait: true);
+                    sessions.DisconnectForUser(user, wait: false);
                     user.SetPassword(password);
-                    user.Enabled = true;
-                    SetUserProperties(user, externalUser);
+                    bool updated = UpdateUserProperties(user, externalUser, checkIfNeeded: true);
                     user.Save();
+                    if (!updated)
+                    {
+                        logger.LogInformation("User '{User}' updated.", user.Name);
+                    }
                 }
                 else
                 {
                     throw new PrincipalOperationException("Not allowed for unsynced users.");
                 }
-                await stream.WriteAsync(JsonSerializer.SerializeToUtf8Bytes(new Credential() { UserName = userName, Password = password }, typeof(Credential), SerializerContext.Default), stoppingToken);
+                Credential credential = new() { UserName = userName, Password = password };
+                knownFolders.RedirectForUser(credential, externalUser.KnownPaths);
+                await stream.WriteAsync(JsonSerializer.SerializeToUtf8Bytes(credential, typeof(Credential), SerializerContext.Default), stoppingToken);
             }
-            catch (PrincipalException ex)
+            catch (Exception ex)
             {
-                logger.LogWarning(ex, "{User}: {Message}", userName, ex.Message);
+                logger.LogWarning(ex, "Setup for user '{User}' failed: {Message}", userName, ex.Message);
             }
             finally
             {

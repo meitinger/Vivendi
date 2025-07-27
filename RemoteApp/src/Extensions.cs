@@ -17,12 +17,21 @@
  */
 
 using Microsoft.Identity.Client;
-using System.Text.Json;
+using Microsoft.Identity.Client.Extensions.Msal;
+using System.Net.Http.Json;
+using System.Runtime.InteropServices;
 
 namespace AufBauWerk.Vivendi.RemoteApp;
 
 internal static partial class Extensions
 {
+    #region Win32
+
+    [LibraryImport("user32.dll")]
+    private static partial nint GetDesktopWindow();
+
+    #endregion
+
     public static async Task<AuthenticationResult?> AcquireTokenAsync(this IPublicClientApplication app, bool useCache, CancellationToken cancellationToken)
     {
         string[] scopes = [$"{Settings.Instance.ApplicationId}/.default"];
@@ -39,23 +48,31 @@ internal static partial class Extensions
 
     public static async Task<Response?> CallEndpointAsync(this IPublicClientApplication app, Request request, CancellationToken cancellationToken = default)
     {
-        for (bool useCache = true; await app.AcquireTokenAsync(useCache, cancellationToken) is { } auth; useCache = false)
+        for (bool useCache = true; await app.AcquireTokenAsync(useCache, cancellationToken) is AuthenticationResult auth; useCache = false)
         {
             using HttpClient client = new();
-            HttpRequestMessage requestMsg = new(HttpMethod.Post, Settings.Instance.EndpointUri);
-            requestMsg.Headers.Add("Authorization", auth.CreateAuthorizationHeader());
-            ByteArrayContent content = new(JsonSerializer.SerializeToUtf8Bytes(request, typeof(Request), SerializerContext.Default));
-            content.Headers.ContentType = new(mediaType: "application/json", charSet: "utf-8");
-            requestMsg.Content = content;
-            HttpResponseMessage responseMsg = await client.SendAsync(requestMsg, cancellationToken);
+            client.DefaultRequestHeaders.Add("Authorization", auth.CreateAuthorizationHeader());
+            HttpResponseMessage responseMsg = await client.PostAsJsonAsync(Settings.Instance.EndpointUri, request, SerializerContext.Default.Request, cancellationToken);
             if (responseMsg.StatusCode is System.Net.HttpStatusCode.Forbidden)
             {
                 continue;
             }
-            using Stream responseStream = await responseMsg.EnsureSuccessStatusCode().Content.ReadAsStreamAsync(cancellationToken);
-            Response? response = (Response?)await JsonSerializer.DeserializeAsync(responseStream, typeof(Response), SerializerContext.Default, cancellationToken);
+            responseMsg.EnsureSuccessStatusCode();
+            using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            cts.CancelAfter(Settings.Instance.Timeout);
+            Response? response = await responseMsg.Content.ReadFromJsonAsync(SerializerContext.Default.Response, cts.Token);
             return response ?? throw new InvalidDataException();
         }
         return null;
     }
+
+    public static async Task<IPublicClientApplication> EnableTokenCacheAsync(this IPublicClientApplication app)
+    {
+        StorageCreationProperties properties = new StorageCreationPropertiesBuilder(Settings.Instance.CacheFileName, Settings.Instance.CacheDirectory).Build();
+        MsalCacheHelper cache = await MsalCacheHelper.CreateAsync(properties);
+        cache.RegisterCache(app.UserTokenCache);
+        return app;
+    }
+
+    public static PublicClientApplicationBuilder WithDesktopAsParent(this PublicClientApplicationBuilder builder) => builder.WithParentActivityOrWindow(GetDesktopWindow);
 }

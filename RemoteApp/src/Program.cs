@@ -19,27 +19,19 @@
 using AufBauWerk.Vivendi.RemoteApp;
 using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.Broker;
-using Microsoft.Identity.Client.Extensions.Msal;
 using System.Diagnostics;
 
 try
 {
     // create the local app using WAM
-    IPublicClientApplication app = PublicClientApplicationBuilder
+    IPublicClientApplication app = await PublicClientApplicationBuilder
         .Create(Settings.Instance.ApplicationId)
         .WithTenantId(Settings.Instance.TenantId)
         .WithDefaultRedirectUri()
         .WithDesktopAsParent()
         .WithBroker(new BrokerOptions(BrokerOptions.OperatingSystems.Windows) { Title = Settings.Instance.Title })
-        .Build();
-
-    // setup a token cache in %APPDATA%
-    MsalCacheHelper cache = await MsalCacheHelper.CreateAsync(new StorageCreationPropertiesBuilder
-    (
-        cacheFileName: "token.cache",
-        cacheDirectory: Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "VivendiLauncher")
-    ).Build());
-    cache.RegisterCache(app.UserTokenCache);
+        .Build()
+        .EnableTokenCacheAsync();
 
     // authenticate with Entra ID and fetch the remote app definition
     Request request = new() { KnownPaths = KnownFolders.GetPaths() };
@@ -50,7 +42,7 @@ try
     }
 
     // launch the remote app
-    using Process process = Win32.StartRemoteApp(response.UserName, response.Password, response.RdpFileContent);
+    using Process process = Mstsc.StartRemoteApp(response.UserName, response.Password, response.RdpFileContent);
     process.WaitForExit();
     Environment.ExitCode = process.ExitCode;
 }

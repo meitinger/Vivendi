@@ -23,6 +23,8 @@ namespace AufBauWerk.Vivendi.Syncer;
 
 internal class Database(Settings settings)
 {
+    public async Task<bool> IsVivendiUserAsync(string userName, CancellationToken cancellationToken) => await GetVivendiCredentialAsync(userName, cancellationToken) is not null;
+
     public async Task<Credential?> GetVivendiCredentialAsync(string userName, CancellationToken cancellationToken)
     {
         using SqlConnection connection = new(settings.ConnectionString);

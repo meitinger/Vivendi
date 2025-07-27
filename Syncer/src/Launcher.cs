@@ -18,7 +18,6 @@
 
 using System.IO.Pipes;
 using System.Security.Principal;
-using System.Text;
 using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
