@@ -6,7 +6,6 @@
     <Copyright>Copyright (c) 2024 by Manuel Meitinger</Copyright>
     <Description>Vivendi Syncer</Description>
     <ImplicitUsings>enable</ImplicitUsings>
-    <InvariantGlobalization>true</InvariantGlobalization>
     <Nullable>enable</Nullable>
     <OutputType>exe</OutputType>
     <Product>AufBauWerk Erweiterungen für Vivendi</Product>

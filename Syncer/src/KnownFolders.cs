@@ -131,7 +131,7 @@ internal unsafe partial class KnownFolders(ILogger<KnownFolders> logger)
                     {
                         if (!UnloadUserProfile(token, profileInfo.Profile))
                         {
-                            logger.LogWarning("Unload profile of user '{User}' failed: {Message}", user.UserName, Marshal.GetLastPInvokeErrorMessage());
+                            logger.LogWarning("Unload profile for user '{User}' failed: {Message}", user.UserName, Marshal.GetLastPInvokeErrorMessage());
                         }
                     }
                     if (!CloseHandle(token))

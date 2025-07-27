@@ -21,10 +21,17 @@ using System.Text.Json.Serialization;
 namespace AufBauWerk.Vivendi.Launcher;
 
 [JsonSerializable(typeof(Credential))]
+[JsonSerializable(typeof(Message))]
 internal partial class SerializerContext : JsonSerializerContext { }
 
 public class Credential
 {
     public required string UserName { get; set; }
     public required string Password { get; set; }
+}
+
+internal class Message
+{
+    public required bool Failed { get; set; }
+    public required Credential? Credential { get; set; }
 }

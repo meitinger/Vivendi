@@ -22,6 +22,7 @@ namespace AufBauWerk.Vivendi.Gateway;
 
 [JsonSerializable(typeof(Credential))]
 [JsonSerializable(typeof(ExternalUser))]
+[JsonSerializable(typeof(Message))]
 [JsonSerializable(typeof(Request))]
 [JsonSerializable(typeof(Response))]
 internal partial class SerializerContext : JsonSerializerContext { }
@@ -36,6 +37,12 @@ internal class ExternalUser
 {
     public required string UserName { get; set; }
     public required Dictionary<Guid, string> KnownPaths { get; set; }
+}
+
+internal class Message
+{
+    public required bool Failed { get; set; }
+    public required Credential? Credential { get; set; }
 }
 
 internal class Request

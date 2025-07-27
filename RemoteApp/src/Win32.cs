@@ -59,33 +59,21 @@ internal static partial class Win32
 
         public static void* ConvertToUnmanaged(string[] managed)
         {
-            if (managed is null)
-            {
-                return null;
-            }
+            if (managed is null) { return null; }
             SAFEARRAYBOUND bound = new()
             {
                 cElements = (uint)managed.Length,
                 lLbound = 0
             };
             SAFEARRAY* psa = SafeArrayCreate(VT.BSTR, 1, &bound);
-            if (psa is null)
-            {
-                throw new OutOfMemoryException();
-            }
+            if (psa is null) { throw new OutOfMemoryException(); }
             try
             {
                 for (int i = 0; i < managed.Length; i++)
                 {
                     nint bstr = Marshal.StringToBSTR(managed[i]);
-                    try
-                    {
-                        Marshal.ThrowExceptionForHR(SafeArrayPutElement(psa, &i, bstr));
-                    }
-                    finally
-                    {
-                        Marshal.FreeBSTR(bstr);
-                    }
+                    try { Marshal.ThrowExceptionForHR(SafeArrayPutElement(psa, &i, bstr)); }
+                    finally { Marshal.FreeBSTR(bstr); }
                 }
             }
             catch

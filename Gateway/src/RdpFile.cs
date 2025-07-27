@@ -18,7 +18,7 @@
 
 namespace AufBauWerk.Vivendi.Gateway;
 
-public class RdpFile
+public class RdpFile(ILogger<RdpFile> logger)
 {
     private readonly string path = Path.Combine(AppContext.BaseDirectory, "vivendi.rdp");
     private (DateTime, byte[])? cache = null;
@@ -32,6 +32,7 @@ public class RdpFile
         }
         byte[] content = await File.ReadAllBytesAsync(path, cancellationToken);
         cache = (time, content);
+        logger.LogInformation("Cached RDP file of {Length} bytes.", content.Length);
         return content;
     }
 }

@@ -53,10 +53,7 @@ internal static partial class Extensions
             using HttpClient client = new();
             client.DefaultRequestHeaders.Add("Authorization", auth.CreateAuthorizationHeader());
             HttpResponseMessage responseMsg = await client.PostAsJsonAsync(Settings.Instance.EndpointUri, request, SerializerContext.Default.Request, cancellationToken);
-            if (responseMsg.StatusCode is System.Net.HttpStatusCode.Forbidden)
-            {
-                continue;
-            }
+            if (responseMsg.StatusCode is System.Net.HttpStatusCode.Forbidden) { continue; }
             responseMsg.EnsureSuccessStatusCode();
             using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             cts.CancelAfter(Settings.Instance.Timeout);

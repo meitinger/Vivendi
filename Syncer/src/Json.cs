@@ -22,6 +22,7 @@ namespace AufBauWerk.Vivendi.Syncer;
 
 [JsonSerializable(typeof(Credential))]
 [JsonSerializable(typeof(ExternalUser))]
+[JsonSerializable(typeof(Message))]
 internal partial class SerializerContext : JsonSerializerContext { }
 
 internal class Credential
@@ -34,4 +35,15 @@ internal class ExternalUser
 {
     public required string UserName { get; set; }
     public required Dictionary<Guid, string> KnownPaths { get; set; }
+}
+
+internal class Message
+{
+    public static Message Forbid() => new() { Failed = false, Credential = null };
+    public static Message InternalServerError() => new() { Failed = true, Credential = null };
+
+    public static implicit operator Message(Credential? credential) => new() { Failed = false, Credential = credential };
+
+    public required bool Failed { get; set; }
+    public required Credential? Credential { get; set; }
 }

@@ -52,70 +52,69 @@ internal sealed class RemoteAppService(ILogger<LauncherService> logger, Settings
 
     protected override IdentityReference ClientIdentity => settings.GatewayUserIdentity;
 
-    protected override async Task ExecuteAsync(PipeStream stream, string _, CancellationToken stoppingToken)
+    protected override async Task<Message> ExecuteAsync(PipeStream stream, string _, CancellationToken stoppingToken)
     {
         using MemoryStream message = await stream.ReadMessageAsync(settings.GatewayTimeout, stoppingToken);
-        if (await JsonSerializer.DeserializeAsync(message, typeof(ExternalUser), SerializerContext.Default, stoppingToken) is ExternalUser externalUser)
+        ExternalUser externalUser = await JsonSerializer.DeserializeAsync(message, SerializerContext.Default.ExternalUser, stoppingToken) ?? throw new InvalidDataException();
+        string userName = externalUser.UserName;
+        int separator = userName.LastIndexOf('@');
+        if (-1 < separator) { userName = userName[..separator]; }
+        if (!await database.IsVivendiUserAsync(userName, stoppingToken)) { return Message.Forbid(); }
+        string password = new(Random.Shared.GetItems(settings.PasswordChars, settings.PasswordLength));
+        using PrincipalContext context = new(ContextType.Machine);
+        using GroupPrincipal group = settings.FindSyncGroup(context);
+        using GroupPrincipal rdpUsers = GroupPrincipal.FindByIdentity(context, IdentityType.Sid, BuiltinRemoteDesktopUsersSid.Value);
+        UserPrincipal? user = null;
+        try
         {
-            string userName = externalUser.UserName;
-            int separator = userName.LastIndexOf('@');
-            if (-1 < separator) { userName = userName[..separator]; }
-            if (!await database.IsVivendiUserAsync(userName, stoppingToken)) { return; }
-            string password = new(Random.Shared.GetItems(settings.PasswordChars, settings.PasswordLength));
-            using PrincipalContext context = new(ContextType.Machine);
-            using GroupPrincipal group = settings.FindSyncGroup(context);
-            using GroupPrincipal rdpUsers = GroupPrincipal.FindByIdentity(context, IdentityType.Sid, BuiltinRemoteDesktopUsersSid.Value);
-            UserPrincipal? user = null;
-            try
+            user = UserPrincipal.FindByIdentity(context, IdentityType.SamAccountName, userName);
+            if (user is null)
             {
-                user = UserPrincipal.FindByIdentity(context, IdentityType.SamAccountName, userName);
-                if (user is null)
+                user = new(context, samAccountName: userName, password, enabled: true);
+                UpdateUserProperties(user, externalUser, checkIfNeeded: false);
+                user.Save();
+                try
                 {
-                    user = new(context, samAccountName: userName, password, enabled: true);
-                    UpdateUserProperties(user, externalUser, checkIfNeeded: false);
-                    user.Save();
-                    try
-                    {
-                        group.Members.Add(user);
-                        group.Save();
-                        rdpUsers.Members.Add(user);
-                        rdpUsers.Save();
-                    }
-                    catch
-                    {
-                        user.Delete();
-                        throw;
-                    }
-                    logger.LogInformation("User '{User}' created.", user.Name);
+                    group.Members.Add(user);
+                    group.Save();
+                    rdpUsers.Members.Add(user);
+                    rdpUsers.Save();
                 }
-                else if (user.IsMemberOf(group))
+                catch
                 {
-                    user.EnsureNotAdministrator();
-                    sessions.DisconnectForUser(user, wait: false);
-                    user.SetPassword(password);
-                    bool updated = UpdateUserProperties(user, externalUser, checkIfNeeded: true);
-                    user.Save();
-                    if (!updated)
-                    {
-                        logger.LogInformation("User '{User}' updated.", user.Name);
-                    }
+                    user.Delete();
+                    throw;
                 }
-                else
-                {
-                    throw new PrincipalOperationException("Not allowed for unsynced users.");
-                }
-                Credential credential = new() { UserName = userName, Password = password };
-                knownFolders.RedirectForUser(credential, externalUser.KnownPaths);
-                await stream.WriteAsync(JsonSerializer.SerializeToUtf8Bytes(credential, typeof(Credential), SerializerContext.Default), stoppingToken);
+                logger.LogInformation("User '{User}' created.", user.Name);
             }
-            catch (Exception ex)
+            else if (user.IsMemberOf(group))
             {
-                logger.LogWarning(ex, "Setup for user '{User}' failed: {Message}", userName, ex.Message);
+                user.EnsureNotAdministrator();
+                sessions.DisconnectForUser(user, wait: false);
+                user.SetPassword(password);
+                bool updated = UpdateUserProperties(user, externalUser, checkIfNeeded: true);
+                user.Save();
+                if (!updated)
+                {
+                    logger.LogInformation("User '{User}' updated.", user.Name);
+                }
             }
-            finally
+            else
             {
-                user?.Dispose();
+                throw new PrincipalOperationException("Not allowed for unsynced users.");
             }
+            Credential credential = new() { UserName = userName, Password = password };
+            knownFolders.RedirectForUser(credential, externalUser.KnownPaths);
+            return credential;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Setup for user '{User}' failed: {Message}", userName, ex.Message);
+            return Message.InternalServerError();
+        }
+        finally
+        {
+            user?.Dispose();
         }
     }
 }

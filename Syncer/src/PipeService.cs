@@ -19,6 +19,7 @@
 using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
+using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
@@ -40,22 +41,39 @@ internal abstract class PipeService(string name, PipeDirection direction, ILogge
             while (!stoppingToken.IsCancellationRequested)
             {
                 await stream.WaitForConnectionAsync(stoppingToken);
-                string userName = string.Empty;
                 try
                 {
-                    userName = stream.GetImpersonationUserName();
-                    await ExecuteAsync(stream, userName, stoppingToken);
+                    string userName;
+                    try
+                    {
+                        userName = stream.GetImpersonationUserName();
+                    }
+                    catch (IOException ex)
+                    {
+                        logger.LogWarning(ex, "Failed to identify pipe client: {Message}", ex.Message);
+                        continue;
+                    }
+                    Message message;
+                    try
+                    {
+                        message = await ExecuteAsync(stream, userName, stoppingToken);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Request from user '{User}' failed: {Message}", userName, ex.Message);
+                        message = Message.InternalServerError();
+                    }
+                    await stream.WriteAsync(JsonSerializer.SerializeToUtf8Bytes(message, SerializerContext.Default.Message), stoppingToken);
                 }
-                catch (Exception ex)
+                finally
                 {
-                    logger.LogWarning(ex, "Request from user '{User}' failed: {Message}", userName, ex.Message);
+                    stream.Disconnect();
                 }
-                stream.Disconnect();
             }
         }
         catch (OperationCanceledException ex) when (ex.CancellationToken == stoppingToken) { }
         catch (Exception ex) { logger.LogExceptionAndExit(ex); }
     }
 
-    protected abstract Task ExecuteAsync(PipeStream stream, string userName, CancellationToken stoppingToken);
+    protected abstract Task<Message> ExecuteAsync(PipeStream stream, string userName, CancellationToken stoppingToken);
 }

@@ -47,24 +47,25 @@ internal static partial class Extensions
         return app.MapPost("/", [Authorize] async (HttpContext context, RdpFile rdpFile) =>
         {
             // verify the request data
-            if (context.User?.Identity?.Name is not string userName) { return Results.Forbid(); }
+            if (context.User?.Identity?.Name is not string userName) { return Results.Challenge(); }
             Request? request = await context.Request.ReadFromJsonAsync(SerializerContext.Default.Request, context.RequestAborted);
             if (request is null) { return Results.BadRequest(); }
             if (!request.KnownPaths.Values.All(Path.IsPathFullyQualified)) { return Results.BadRequest(); }
             ExternalUser externalUser = new() { UserName = userName, KnownPaths = request.KnownPaths };
-            byte[] message = JsonSerializer.SerializeToUtf8Bytes(externalUser, SerializerContext.Default.ExternalUser);
-            if (64 * 1024 < message.Length) { return Results.BadRequest(); }
+            byte[] requestMessage = JsonSerializer.SerializeToUtf8Bytes(externalUser, SerializerContext.Default.ExternalUser);
+            if (64 * 1024 < requestMessage.Length) { return Results.BadRequest(); }
 
             // retrieve the RDP file and credential
             byte[] rdpFileContent = await rdpFile.GetContentAsync(context.RequestAborted);
             using NamedPipeClientStream stream = new(".", "VivendiRemoteApp", PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Identification, HandleInheritability.None);
             await stream.ConnectAsync(context.RequestAborted);
-            await stream.WriteAsync(message, context.RequestAborted);
-            Credential? credential = await JsonSerializer.DeserializeAsync(stream, SerializerContext.Default.Credential, context.RequestAborted);
-            if (credential is null) { return Results.Forbid(); }
+            await stream.WriteAsync(requestMessage, context.RequestAborted);
+            Message responseMessage = await JsonSerializer.DeserializeAsync(stream, SerializerContext.Default.Message, context.RequestAborted) ?? throw new InvalidDataException();
+            if (responseMessage.Failed) { return Results.InternalServerError(); }
+            if (responseMessage.Credential is null) { return Results.Forbid(); }
 
             // done
-            return Results.Json(Response.Build(credential, rdpFileContent), SerializerContext.Default.Response);
+            return Results.Json(Response.Build(responseMessage.Credential, rdpFileContent), SerializerContext.Default.Response);
         });
     }
 }
