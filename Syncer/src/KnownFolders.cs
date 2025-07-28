@@ -59,10 +59,12 @@ internal unsafe partial class KnownFolders(ILogger<KnownFolders> logger)
 
     private enum LOGON32_PROVIDER { DEFAULT = 0 }
 
+    private enum PT { NOUI = 0x00000001 }
+
     private struct PROFILEINFOW
     {
         public int Size;
-        public uint Flags;
+        public PT Flags;
         public char* UserName;
         public char* ProfilePath;
         public char* DefaultPath;
@@ -99,6 +101,7 @@ internal unsafe partial class KnownFolders(ILogger<KnownFolders> logger)
             PROFILEINFOW profileInfo = new()
             {
                 Size = sizeof(PROFILEINFOW),
+                Flags = PT.NOUI,
                 UserName = userName,
             };
             try

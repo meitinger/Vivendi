@@ -44,7 +44,7 @@ internal static partial class Extensions
 
     public static RouteHandlerBuilder MapEndpoint(this WebApplication app)
     {
-        return app.MapPost("/", [Authorize] async (HttpContext context, RdpFile rdpFile) =>
+        return app.MapPost("/gateway", [Authorize] async (HttpContext context, RdpFile rdpFile) =>
         {
             // verify the request data
             if (context.User?.Identity?.Name is not string userName) { return Results.Challenge(); }

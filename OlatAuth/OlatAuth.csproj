@@ -1,6 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
+    <AssemblyName>VivendiOlatAuth</AssemblyName>
     <Company>AufBauWerk - Unternehmen für junge Menschen</Company>
     <Copyright>Copyright (c) 2024 by Manuel Meitinger</Copyright>
     <Description>Vivendi OlatAuth</Description>
@@ -10,12 +11,12 @@
     <Product>AufBauWerk Erweiterungen für Vivendi</Product>
     <ProjectDir>src\</ProjectDir>
     <RootNamespace>AufBauWerk.Vivendi.OlatAuth</RootNamespace>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net9.0-windows</TargetFramework>
     <Version>2.0.1.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.0.2" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="6.1.0" />
     <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.7" />
     <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="9.0.7" />
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.10" />

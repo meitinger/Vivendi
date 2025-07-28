@@ -3,6 +3,7 @@
   <PropertyGroup>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <ApplicationIcon>res\RemoteApp.ico</ApplicationIcon>
+    <AssemblyName>VivendiRemoteApp</AssemblyName>
     <Company>AufBauWerk - Unternehmen für junge Menschen</Company>
     <Copyright>Copyright (c) 2024 by Manuel Meitinger</Copyright>
     <Description>Vivendi RemoteApp</Description>

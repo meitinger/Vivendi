@@ -70,7 +70,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
             user = UserPrincipal.FindByIdentity(context, IdentityType.SamAccountName, userName);
             if (user is null)
             {
-                user = new(context, samAccountName: userName, password, enabled: true);
+                user = new(context, samAccountName: userName, password: password, enabled: true);
                 UpdateUserProperties(user, externalUser, checkIfNeeded: false);
                 user.Save();
                 try

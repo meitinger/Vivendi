@@ -193,7 +193,7 @@ public sealed class OpenOlat : ControllerBase, IDisposable
         client.Dispose();
     }
 
-    [HttpPost("/authenticate")]
+    [HttpPost("/openolat/authenticate")]
     public async Task<IResult> PostAuthenticateAsync()
     {
         string? userName = Request.Form["username"];
