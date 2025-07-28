@@ -20,7 +20,7 @@ using System.DirectoryServices.AccountManagement;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal sealed class CleanupService(ILogger<LauncherService> logger, Settings settings, Database database) : BackgroundService
+internal sealed class CleanupService(ILogger<CleanupService> logger, Settings settings, Database database) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -32,18 +32,19 @@ internal sealed class CleanupService(ILogger<LauncherService> logger, Settings s
                 using GroupPrincipal group = settings.FindSyncGroup(context);
                 foreach (UserPrincipal user in group.GetMembers().OfType<UserPrincipal>())
                 {
+                    string userName = user.Name;
                     try
                     {
                         user.EnsureNotAdministrator();
-                        if (await database.IsVivendiUserAsync(user.Name, stoppingToken))
+                        if (!await database.IsVivendiUserAsync(userName, stoppingToken))
                         {
                             user.Delete();
-                            logger.LogInformation("User '{User}' deleted.", user.Name);
+                            logger.LogInformation("User '{User}' deleted.", userName);
                         }
                     }
                     catch (Exception ex)
                     {
-                        logger.LogWarning(ex, "Maintenance for user '{User}' failed: {Message}", user.Name, ex.Message);
+                        logger.LogWarning(ex, "Maintenance for user '{User}' failed: {Message}", userName, ex.Message);
                     }
                 }
                 await Task.Delay(settings.CleanupInterval, stoppingToken);

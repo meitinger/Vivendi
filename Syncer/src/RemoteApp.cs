@@ -23,7 +23,7 @@ using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal sealed class RemoteAppService(ILogger<LauncherService> logger, Settings settings, Database database, KnownFolders knownFolders, Sessions sessions) : PipeService("VivendiRemoteApp", PipeDirection.InOut, logger)
+internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Settings settings, Database database, KnownFolders knownFolders, Sessions sessions) : PipeService("VivendiRemoteApp", PipeDirection.InOut, logger)
 {
     private static readonly SecurityIdentifier BuiltinRemoteDesktopUsersSid = new(WellKnownSidType.BuiltinRemoteDesktopUsersSid, null);
 
@@ -32,14 +32,14 @@ internal sealed class RemoteAppService(ILogger<LauncherService> logger, Settings
         user.AccountExpirationDate = DateTime.Now + TimeSpan.FromTicks(TimeSpan.TicksPerMinute);
         if (checkIfNeeded)
         {
-            bool changed =
+            bool unmodified =
                 user.Enabled is true &&
                 user.Description == settings.UserDescription &&
                 user.DisplayName == externalUser.UserName &&
                 user.PasswordNeverExpires is true &&
                 user.PasswordNotRequired is false &&
                 user.UserCannotChangePassword is true;
-            if (!changed) { return false; }
+            if (unmodified) { return false; }
         }
         user.Enabled = true;
         user.Description = settings.UserDescription;
@@ -94,7 +94,7 @@ internal sealed class RemoteAppService(ILogger<LauncherService> logger, Settings
                 user.SetPassword(password);
                 bool updated = UpdateUserProperties(user, externalUser, checkIfNeeded: true);
                 user.Save();
-                if (!updated)
+                if (updated)
                 {
                     logger.LogInformation("User '{User}' updated.", user.Name);
                 }

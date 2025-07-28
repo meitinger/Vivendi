@@ -53,11 +53,15 @@ internal static partial class Mstsc
         try
         {
             IMsRdpSessionManager manager = ComInterfaceMarshaller<IMsRdpSessionManager>.ConvertToManaged(managerPtr) ?? throw new NullReferenceException();
-            using (FileStream fileStream = new(Path.GetTempFileName(), FileMode.Create, FileAccess.Write, FileShare.Read, 4096, FileOptions.DeleteOnClose))
+            string rdpFileName = Path.GetTempFileName();
+            try
             {
-                fileStream.Write(rdpFileContent);
-                fileStream.Flush();
-                manager.StartRemoteApplication([userName, password], [fileStream.Name], 0);
+                File.WriteAllBytes(rdpFileName, rdpFileContent);
+                manager.StartRemoteApplication([userName, password], [rdpFileName], 0);
+            }
+            finally
+            {
+                File.Delete(rdpFileName);
             }
             return Process.GetProcessById(manager.GetProcessId());
         }

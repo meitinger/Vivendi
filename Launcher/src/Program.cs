@@ -27,14 +27,13 @@ try
 {
     string? path = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Connext\Vivendi", "Path", null) as string;
     using Process vivendi = Process.Start(Path.Combine(path ?? AppContext.BaseDirectory, "Vivendi.exe"));
-    const int timeout = 10000;
-    using NamedPipeClientStream stream = new(".", "VivendiLauncher", PipeDirection.In, PipeOptions.None, TokenImpersonationLevel.Identification, HandleInheritability.None) { ReadTimeout = timeout };
-    stream.Connect(timeout);
-    Message message = JsonSerializer.Deserialize(stream, SerializerContext.Default.Message) ?? throw new InvalidDataException();
+    using NamedPipeClientStream stream = new(".", "VivendiLauncher", PipeDirection.In, PipeOptions.Asynchronous, TokenImpersonationLevel.Identification, HandleInheritability.None);
+    using CancellationTokenSource cts = new(millisecondsDelay: 30000);
+    await stream.ConnectAsync(cts.Token);
+    Message message = await JsonSerializer.DeserializeAsync(stream, SerializerContext.Default.Message, cts.Token) ?? throw new InvalidDataException();
     if (message.Failed) throw new InvalidOperationException();
     if (message.Credential is null) throw new UnauthorizedAccessException();
-    stream.Close();
-    vivendi.SignIn(message.Credential);
+    await vivendi.SignInAsync(message.Credential, cts.Token);
 }
 catch (Exception ex)
 {

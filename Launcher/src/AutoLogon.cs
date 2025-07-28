@@ -47,9 +47,10 @@ internal static partial class AutoLogon
         }
     }
 
-    public static void SignIn(this Process vivendi, Credential credential)
+    public static async Task SignInAsync(this Process vivendi, Credential credential, CancellationToken cancellationToken)
     {
-        for (int numberOfTry = 0; numberOfTry < 600; numberOfTry++)
+        cancellationToken.ThrowIfCancellationRequested();
+        while (true)
         {
             Controls? controls = vivendi
                 .Threads
@@ -71,10 +72,9 @@ internal static partial class AutoLogon
                 controls.UserNameEdit.Text = credential.UserName;
                 controls.PasswordEdit.Text = credential.Password;
                 controls.OkButton.Click();
-                return;
+                break;
             }
-            Thread.Sleep(100);
+            await Task.Delay(millisecondsDelay: 100, cancellationToken);
         }
-        throw new TimeoutException();
     }
 }
