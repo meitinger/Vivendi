@@ -23,7 +23,7 @@ using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Settings settings, Database database, KnownFolders knownFolders, Sessions sessions) : PipeService("VivendiRemoteApp", PipeDirection.InOut, logger)
+internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Settings settings, Database database, KnownFolders knownFolders, Sessions sessions) : PipeService("VivendiRemoteApp", PipeDirection.InOut, settings, logger)
 {
     private static readonly SecurityIdentifier BuiltinRemoteDesktopUsersSid = new(WellKnownSidType.BuiltinRemoteDesktopUsersSid, null);
 
@@ -34,7 +34,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         {
             bool unmodified =
                 user.Enabled is true &&
-                user.Description == settings.UserDescription &&
+                user.Description == Settings.UserDescription &&
                 user.DisplayName == externalUser.UserName &&
                 user.PasswordNeverExpires is true &&
                 user.PasswordNotRequired is false &&
@@ -42,7 +42,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
             if (unmodified) { return false; }
         }
         user.Enabled = true;
-        user.Description = settings.UserDescription;
+        user.Description = Settings.UserDescription;
         user.DisplayName = externalUser.UserName;
         user.PasswordNeverExpires = true;
         user.PasswordNotRequired = false;
@@ -50,19 +50,19 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         return true;
     }
 
-    protected override IdentityReference ClientIdentity => settings.GatewayUserIdentity;
+    protected override IdentityReference ClientIdentity => Settings.GatewayUserIdentity;
 
-    protected override async Task<Message> ExecuteAsync(PipeStream stream, string _, CancellationToken stoppingToken)
+    protected override async Task<Result> ExecuteAsync(PipeStream stream, string _, CancellationToken stoppingToken)
     {
-        using MemoryStream message = await stream.ReadMessageAsync(settings.GatewayTimeout, stoppingToken);
+        using MemoryStream message = await stream.ReadMessageAsync(Settings.MessageTimeout, stoppingToken);
         ExternalUser externalUser = await JsonSerializer.DeserializeAsync(message, SerializerContext.Default.ExternalUser, stoppingToken) ?? throw new InvalidDataException();
         string userName = externalUser.UserName;
         int separator = userName.LastIndexOf('@');
         if (-1 < separator) { userName = userName[..separator]; }
-        if (!await database.IsVivendiUserAsync(userName, stoppingToken)) { return Message.Forbid(); }
-        string password = new(Random.Shared.GetItems(settings.PasswordChars, settings.PasswordLength));
+        if (!await database.IsVivendiUserAsync(userName, stoppingToken)) { return Result.Forbid(); }
+        string password = new(Random.Shared.GetItems(Settings.PasswordChars, Settings.PasswordLength));
         using PrincipalContext context = new(ContextType.Machine);
-        using GroupPrincipal group = settings.FindSyncGroup(context);
+        using GroupPrincipal group = Settings.FindSyncGroup(context);
         using GroupPrincipal rdpUsers = GroupPrincipal.FindByIdentity(context, IdentityType.Sid, BuiltinRemoteDesktopUsersSid.Value);
         UserPrincipal? user = null;
         try
@@ -110,7 +110,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Setup for user '{User}' failed: {Message}", userName, ex.Message);
-            return Message.InternalServerError();
+            return Result.Failed(ex);
         }
         finally
         {

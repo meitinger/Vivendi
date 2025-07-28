@@ -30,10 +30,10 @@ try
     using NamedPipeClientStream stream = new(".", "VivendiLauncher", PipeDirection.In, PipeOptions.Asynchronous, TokenImpersonationLevel.Identification, HandleInheritability.None);
     using CancellationTokenSource cts = new(millisecondsDelay: 30000);
     await stream.ConnectAsync(cts.Token);
-    Message message = await JsonSerializer.DeserializeAsync(stream, SerializerContext.Default.Message, cts.Token) ?? throw new InvalidDataException();
-    if (message.Failed) throw new InvalidOperationException();
-    if (message.Credential is null) throw new UnauthorizedAccessException();
-    await vivendi.SignInAsync(message.Credential, cts.Token);
+    Result result = await JsonSerializer.DeserializeAsync(stream, SerializerContext.Default.Result, cts.Token) ?? throw new InvalidDataException();
+    if (result.Error is string error) throw new ApplicationException(error);
+    if (result.Credential is null) throw new UnauthorizedAccessException();
+    await vivendi.SignInAsync(result.Credential, cts.Token);
 }
 catch (Exception ex)
 {

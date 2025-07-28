@@ -23,11 +23,13 @@ using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal abstract class PipeService(string name, PipeDirection direction, ILogger<PipeService> logger) : BackgroundService
+internal abstract class PipeService(string name, PipeDirection direction, Settings settings, ILogger<PipeService> logger) : BackgroundService
 {
     private static readonly SecurityIdentifier LocalSystemSid = new(WellKnownSidType.LocalSystemSid, null);
 
     protected abstract IdentityReference ClientIdentity { get; }
+
+    protected Settings Settings => settings;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -53,17 +55,17 @@ internal abstract class PipeService(string name, PipeDirection direction, ILogge
                         logger.LogWarning(ex, "Failed to identify pipe client: {Message}", ex.Message);
                         continue;
                     }
-                    Message message;
+                    Result result;
                     try
                     {
-                        message = await ExecuteAsync(stream, userName, stoppingToken);
+                        result = await ExecuteAsync(stream, userName, stoppingToken);
                     }
                     catch (Exception ex)
                     {
                         logger.LogError(ex, "Request from user '{User}' failed: {Message}", userName, ex.Message);
-                        message = Message.InternalServerError();
+                        result = Result.Failed(ex);
                     }
-                    await stream.WriteAsync(JsonSerializer.SerializeToUtf8Bytes(message, SerializerContext.Default.Message), stoppingToken);
+                    await stream.SendMessageAsync(JsonSerializer.SerializeToUtf8Bytes(result, SerializerContext.Default.Result), settings.MessageTimeout, stoppingToken);
                 }
                 finally
                 {
@@ -75,5 +77,5 @@ internal abstract class PipeService(string name, PipeDirection direction, ILogge
         catch (Exception ex) { logger.LogExceptionAndExit(ex); }
     }
 
-    protected abstract Task<Message> ExecuteAsync(PipeStream stream, string userName, CancellationToken stoppingToken);
+    protected abstract Task<Result> ExecuteAsync(PipeStream stream, string userName, CancellationToken stoppingToken);
 }

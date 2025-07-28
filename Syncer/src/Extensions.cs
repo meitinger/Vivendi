@@ -46,15 +46,21 @@ internal static class Extensions
     {
         using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(timeout);
-        CancellationToken timedCancellationToken = cts.Token;
         byte[] buffer = new byte[1024];
         MemoryStream result = new();
         do
         {
-            int read = await stream.ReadAsync(buffer, timedCancellationToken);
+            int read = await stream.ReadAsync(buffer, cts.Token);
             result.Write(buffer, 0, read);
         } while (!stream.IsMessageComplete);
         result.Position = 0;
         return result;
+    }
+
+    public static async Task SendMessageAsync(this PipeStream stream, byte[] message, TimeSpan timeout, CancellationToken cancellationToken)
+    {
+        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(timeout);
+        await stream.WriteAsync(message, cts.Token);
     }
 }

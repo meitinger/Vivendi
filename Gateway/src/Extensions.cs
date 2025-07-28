@@ -52,20 +52,20 @@ internal static partial class Extensions
             if (request is null) { return Results.BadRequest(); }
             if (!request.KnownPaths.Values.All(Path.IsPathFullyQualified)) { return Results.BadRequest(); }
             ExternalUser externalUser = new() { UserName = userName, KnownPaths = request.KnownPaths };
-            byte[] requestMessage = JsonSerializer.SerializeToUtf8Bytes(externalUser, SerializerContext.Default.ExternalUser);
-            if (64 * 1024 < requestMessage.Length) { return Results.BadRequest(); }
+            byte[] message = JsonSerializer.SerializeToUtf8Bytes(externalUser, SerializerContext.Default.ExternalUser);
+            if (64 * 1024 < message.Length) { return Results.BadRequest(); }
 
             // retrieve the RDP file and credential
             byte[] rdpFileContent = await rdpFile.GetContentAsync(context.RequestAborted);
             using NamedPipeClientStream stream = new(".", "VivendiRemoteApp", PipeDirection.InOut, PipeOptions.Asynchronous, TokenImpersonationLevel.Identification, HandleInheritability.None);
             await stream.ConnectAsync(context.RequestAborted);
-            await stream.WriteAsync(requestMessage, context.RequestAborted);
-            Message responseMessage = await JsonSerializer.DeserializeAsync(stream, SerializerContext.Default.Message, context.RequestAborted) ?? throw new InvalidDataException();
-            if (responseMessage.Failed) { return Results.InternalServerError(); }
-            if (responseMessage.Credential is null) { return Results.Forbid(); }
+            await stream.WriteAsync(message, context.RequestAborted);
+            Result result = await JsonSerializer.DeserializeAsync(stream, SerializerContext.Default.Result, context.RequestAborted) ?? throw new InvalidDataException();
+            if (result.Error is not null) { return Results.InternalServerError(); }
+            if (result.Credential is null) { return Results.Forbid(); }
 
             // done
-            return Results.Json(Response.Build(responseMessage.Credential, rdpFileContent), SerializerContext.Default.Response);
+            return Results.Json(Response.Build(result.Credential, rdpFileContent), SerializerContext.Default.Response);
         });
     }
 }

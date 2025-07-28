@@ -21,9 +21,9 @@ using System.Security.Principal;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal sealed class LauncherService(ILogger<LauncherService> logger, Settings settings, Database database) : PipeService("VivendiLauncher", PipeDirection.Out, logger)
+internal sealed class LauncherService(ILogger<LauncherService> logger, Settings settings, Database database) : PipeService("VivendiLauncher", PipeDirection.Out, settings, logger)
 {
-    protected override IdentityReference ClientIdentity => settings.SyncGroupIdentity;
+    protected override IdentityReference ClientIdentity => Settings.SyncGroupIdentity;
 
-    protected override async Task<Message> ExecuteAsync(PipeStream stream, string userName, CancellationToken stoppingToken) => await database.GetVivendiCredentialAsync(userName, stoppingToken);
+    protected override async Task<Result> ExecuteAsync(PipeStream stream, string userName, CancellationToken stoppingToken) => await database.GetVivendiCredentialAsync(userName, stoppingToken);
 }

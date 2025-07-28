@@ -38,8 +38,6 @@ internal class Settings(IConfiguration configuration)
         }
     }
 
-    private readonly IConfigurationSection section = configuration.GetRequiredSection("Syncer");
-
     private static T GetPrincipal<T>(Func<PrincipalContext, IdentityType, string, T> find, PrincipalContext context, string nameOrSid) => GetIdentity(nameOrSid) switch
     {
         SecurityIdentifier sid => find(context, IdentityType.Sid, sid.Value),
@@ -47,13 +45,15 @@ internal class Settings(IConfiguration configuration)
         _ => throw new InvalidOperationException(),
     };
 
+    private readonly IConfigurationSection section = configuration.GetRequiredSection("Syncer");
+
     private T Get<T>(T? defaultValue = default, [CallerMemberName] string name = "") => section.GetValue(name, defaultValue) ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
 
     public TimeSpan CleanupInterval => Get(TimeSpan.FromHours(1));
     public string ConnectionString => Get<string>();
-    public TimeSpan GatewayTimeout => Get(TimeSpan.FromSeconds(5));
     private string GatewayUser => Get<string>();
     public IdentityReference GatewayUserIdentity => GetIdentity(GatewayUser);
+    public TimeSpan MessageTimeout => Get(TimeSpan.FromSeconds(5));
     public char[] PasswordChars => Get(DefaultPasswordChars);
     public int PasswordLength => Get(25);
     public string QueryString => Get<string>();
