@@ -16,7 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using System.IO.Pipes;
 using System.Security.Principal;
@@ -26,25 +25,9 @@ namespace AufBauWerk.Vivendi.Gateway;
 
 internal static partial class Extensions
 {
-    public static void BuildEntraJwtOptions(this IConfiguration configuration, JwtBearerOptions options)
+    public static RouteHandlerBuilder MapRemoteAppApi(this IEndpointRouteBuilder app)
     {
-        string GetSetting(string name) => configuration[name] ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
-        string tenantId = GetSetting("TenantId");
-        string applicationId = GetSetting("ApplicationId");
-        options.Authority = $"https://login.microsoftonline.com/{tenantId}";
-        options.TokenValidationParameters = new()
-        {
-            ValidateAudience = true,
-            ValidateIssuer = true,
-            ValidateIssuerSigningKey = true,
-            ValidAudience = applicationId,
-            ValidIssuers = [$"https://sts.windows.net/{tenantId}/", $"https://login.microsoftonline.com/{tenantId}/v2.0/"],
-        };
-    }
-
-    public static RouteHandlerBuilder MapEndpoint(this WebApplication app)
-    {
-        return app.MapPost("/gateway", [Authorize] async (HttpContext context, RdpFile rdpFile) =>
+        return app.MapPost("/gateway/remoteapp", [Authorize] async (HttpContext context, RdpFile rdpFile) =>
         {
             // verify the request data
             if (context.User?.Identity?.Name is not string userName) { return Results.Challenge(); }

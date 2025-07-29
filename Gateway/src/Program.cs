@@ -20,6 +20,7 @@ using AufBauWerk.Vivendi.Gateway;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.Extensions.Logging.Configuration;
 using Microsoft.Extensions.Logging.EventLog;
+using Microsoft.Identity.Web;
 
 WebApplicationBuilder builder = WebApplication.CreateSlimBuilder(args);
 LoggerProviderOptions.RegisterProviderOptions<EventLogSettings, EventLogLoggerProvider>(builder.Services);
@@ -29,11 +30,11 @@ builder.Services
     .AddSingleton<RdpFile>()
     .AddAuthorization()
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(builder.Configuration.BuildEntraJwtOptions);
+    .AddMicrosoftIdentityWebApi(builder.Configuration);
 
 WebApplication app = builder.Build();
 app.UseAuthentication();
 app.UseAuthorization();
-app.MapEndpoint();
+app.MapRemoteAppApi();
 
 app.Run();

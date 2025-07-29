@@ -31,7 +31,7 @@ try
     using CancellationTokenSource cts = new(millisecondsDelay: 30000);
     await stream.ConnectAsync(cts.Token);
     Result result = await JsonSerializer.DeserializeAsync(stream, SerializerContext.Default.Result, cts.Token) ?? throw new InvalidDataException();
-    if (result.Error is string error) throw new ApplicationException(error);
+    if (result.Error is not null) throw new ApplicationException(result.Error);
     if (result.Credential is null) throw new UnauthorizedAccessException();
     await vivendi.SignInAsync(result.Credential, cts.Token);
 }
