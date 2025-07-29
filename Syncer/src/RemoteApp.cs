@@ -19,7 +19,6 @@
 using System.DirectoryServices.AccountManagement;
 using System.IO.Pipes;
 using System.Security.Principal;
-using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
@@ -52,10 +51,18 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
 
     protected override IdentityReference ClientIdentity => Settings.GatewayUserIdentity;
 
-    protected override async Task<Result> ExecuteAsync(PipeStream stream, string _, CancellationToken stoppingToken)
+    protected override async Task<Result> ExecuteAsync(NamedPipeServerStream stream, CancellationToken stoppingToken)
     {
-        using MemoryStream message = await stream.ReadMessageAsync(Settings.MessageTimeout, stoppingToken);
-        ExternalUser externalUser = await JsonSerializer.DeserializeAsync(message, SerializerContext.Default.ExternalUser, stoppingToken) ?? throw new InvalidDataException();
+        ExternalUser externalUser;
+        try
+        {
+            externalUser = await stream.ReceiveMessageAsync(SerializerContext.Default.ExternalUser, Settings.MessageTimeout, stoppingToken) ?? throw new InvalidDataException();
+        }
+        catch (IOException ex)
+        {
+            logger.LogWarning(ex, "Receive external user from pipe failed: {Message}", ex.Message);
+            return ex;
+        }
         string userName = externalUser.UserName;
         int separator = userName.LastIndexOf('@');
         if (-1 < separator) { userName = userName[..separator]; }
@@ -107,10 +114,10 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
             knownFolders.RedirectForUser(credential, externalUser.KnownPaths);
             return credential;
         }
-        catch (Exception ex)
+        catch (PrincipalException ex)
         {
             logger.LogWarning(ex, "Setup for user '{User}' failed: {Message}", userName, ex.Message);
-            return Result.Failed(ex);
+            return ex;
         }
         finally
         {

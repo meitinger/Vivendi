@@ -25,5 +25,18 @@ internal sealed class LauncherService(ILogger<LauncherService> logger, Settings 
 {
     protected override IdentityReference ClientIdentity => Settings.SyncGroupIdentity;
 
-    protected override async Task<Result> ExecuteAsync(PipeStream stream, string userName, CancellationToken stoppingToken) => await database.GetVivendiCredentialAsync(userName, stoppingToken);
+    protected override async Task<Result> ExecuteAsync(NamedPipeServerStream stream, CancellationToken stoppingToken)
+    {
+        string userName;
+        try
+        {
+            userName = stream.GetImpersonationUserName();
+        }
+        catch (IOException ex)
+        {
+            logger.LogWarning(ex, "Get user name from pipe failed: {Message}", ex.Message);
+            return ex;
+        }
+        return await database.GetVivendiCredentialAsync(userName, stoppingToken);
+    }
 }

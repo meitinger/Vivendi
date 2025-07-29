@@ -20,6 +20,8 @@ using System.Diagnostics.CodeAnalysis;
 using System.DirectoryServices.AccountManagement;
 using System.IO.Pipes;
 using System.Security.Principal;
+using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
@@ -42,25 +44,48 @@ internal static class Extensions
         Environment.Exit(1);
     }
 
-    public static async Task<MemoryStream> ReadMessageAsync(this PipeStream stream, TimeSpan timeout, CancellationToken cancellationToken)
+    public static async Task<T?> ReceiveMessageAsync<T>(this PipeStream stream, JsonTypeInfo<T> jsonTypeInfo, TimeSpan timeout, CancellationToken cancellationToken)
     {
         using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(timeout);
-        byte[] buffer = new byte[1024];
-        MemoryStream result = new();
-        do
+        try
         {
-            int read = await stream.ReadAsync(buffer, cts.Token);
-            result.Write(buffer, 0, read);
-        } while (!stream.IsMessageComplete);
-        result.Position = 0;
-        return result;
+            byte[] buffer = new byte[1024];
+            using MemoryStream memoryStream = new();
+            do
+            {
+                int read = await stream.ReadAsync(buffer, cts.Token);
+                memoryStream.Write(buffer, 0, read);
+            } while (!stream.IsMessageComplete);
+            memoryStream.Position = 0;
+
+            return await JsonSerializer.DeserializeAsync(memoryStream, jsonTypeInfo, cts.Token);
+        }
+        catch (JsonException ex)
+        {
+            throw new IOException(ex.Message, ex);
+        }
+        catch (OperationCanceledException ex) when (ex.CancellationToken == cts.Token)
+        {
+            throw new IOException(ex.Message, ex);
+        }
     }
 
-    public static async Task SendMessageAsync(this PipeStream stream, byte[] message, TimeSpan timeout, CancellationToken cancellationToken)
+    public static async Task SendMessageAsync<T>(this PipeStream stream, T message, JsonTypeInfo<T> jsonTypeInfo, TimeSpan timeout, CancellationToken cancellationToken)
     {
         using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         cts.CancelAfter(timeout);
-        await stream.WriteAsync(message, cts.Token);
+        try
+        {
+            await stream.WriteAsync(JsonSerializer.SerializeToUtf8Bytes(message, jsonTypeInfo), cts.Token);
+        }
+        catch (JsonException ex)
+        {
+            throw new IOException(ex.Message, ex);
+        }
+        catch (OperationCanceledException ex) when (ex.CancellationToken == cts.Token)
+        {
+            throw new IOException(ex.Message, ex);
+        }
     }
 }

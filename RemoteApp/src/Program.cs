@@ -35,7 +35,8 @@ try
 
     // authenticate with Entra ID and fetch the remote app definition
     Request request = new() { KnownPaths = KnownFolders.GetPaths() };
-    if (await app.CallEndpointAsync(request) is not Response response)
+    using CancellationTokenSource cts = new(Settings.Instance.Timeout);
+    if (await app.CallEndpointAsync(request, cts.Token) is not Response response)
     {
         Environment.ExitCode = Win32.ERROR_CANCELLED;
         return;

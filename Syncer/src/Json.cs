@@ -39,10 +39,10 @@ internal class ExternalUser
 
 internal class Result
 {
-    public static Result Failed(Exception exception) => new() { Error = exception.Message, Credential = null };
     public static Result Forbid() => new() { Error = null, Credential = null };
 
     public static implicit operator Result(Credential? credential) => new() { Error = null, Credential = credential };
+    public static implicit operator Result(Exception exception) => new() { Error = exception.Message, Credential = null };
 
     public required Credential? Credential { get; set; }
     public required string? Error { get; set; }

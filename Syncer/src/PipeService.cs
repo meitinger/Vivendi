@@ -19,7 +19,6 @@
 using System.IO.Pipes;
 using System.Security.AccessControl;
 using System.Security.Principal;
-using System.Text.Json;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
@@ -40,36 +39,38 @@ internal abstract class PipeService(string name, PipeDirection direction, Settin
             security.AddAccessRule(new(LocalSystemSid, PipeAccessRights.FullControl, AccessControlType.Allow));
             security.AddAccessRule(new(ClientIdentity, clientRights, AccessControlType.Allow));
             using NamedPipeServerStream stream = NamedPipeServerStreamAcl.Create(name, direction, maxNumberOfServerInstances: 1, PipeTransmissionMode.Message, PipeOptions.Asynchronous, inBufferSize: 0, outBufferSize: 0, security);
+            logger.LogInformation("Opened named pipe '{Pipe}' ({Direction}) for client '{Identity}'.", name, direction, ClientIdentity);
             while (!stoppingToken.IsCancellationRequested)
             {
+                logger.LogTrace("Wait for connection on pipe '{Pipe}'...", name);
                 await stream.WaitForConnectionAsync(stoppingToken);
+                logger.LogTrace("Connection established on pipe '{Pipe}'.", name);
                 try
                 {
-                    string userName;
-                    try
-                    {
-                        userName = stream.GetImpersonationUserName();
-                    }
-                    catch (IOException ex)
-                    {
-                        logger.LogWarning(ex, "Failed to identify pipe client: {Message}", ex.Message);
-                        continue;
-                    }
                     Result result;
                     try
                     {
-                        result = await ExecuteAsync(stream, userName, stoppingToken);
+                        result = await ExecuteAsync(stream, stoppingToken);
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Request from user '{User}' failed: {Message}", userName, ex.Message);
-                        result = Result.Failed(ex);
+                        logger.LogError(ex, "Request on pipe '{Pipe}' failed: {Message}", name, ex.Message);
+                        result = ex;
                     }
-                    await stream.SendMessageAsync(JsonSerializer.SerializeToUtf8Bytes(result, SerializerContext.Default.Result), settings.MessageTimeout, stoppingToken);
+                    try
+                    {
+                        await stream.SendMessageAsync(result, SerializerContext.Default.Result, Settings.MessageTimeout, stoppingToken);
+                    }
+                    catch (IOException ex)
+                    {
+                        logger.LogWarning(ex, "Send result on pipe '{Pipe}' failed: {Message}", name, ex.Message);
+                    }
                 }
                 finally
                 {
+                    logger.LogTrace("Disconnect pipe '{Pipe}'...", name);
                     stream.Disconnect();
+                    logger.LogTrace("Pipe '{Pipe}' disconnected.", name);
                 }
             }
         }
@@ -77,5 +78,5 @@ internal abstract class PipeService(string name, PipeDirection direction, Settin
         catch (Exception ex) { logger.LogExceptionAndExit(ex); }
     }
 
-    protected abstract Task<Result> ExecuteAsync(PipeStream stream, string userName, CancellationToken stoppingToken);
+    protected abstract Task<Result> ExecuteAsync(NamedPipeServerStream stream, CancellationToken stoppingToken);
 }

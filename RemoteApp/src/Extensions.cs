@@ -46,7 +46,7 @@ internal static partial class Extensions
         return null;
     }
 
-    public static async Task<Response?> CallEndpointAsync(this IPublicClientApplication app, Request request, CancellationToken cancellationToken = default)
+    public static async Task<Response?> CallEndpointAsync(this IPublicClientApplication app, Request request, CancellationToken cancellationToken)
     {
         for (bool useCache = true; await app.AcquireTokenAsync(useCache, cancellationToken) is AuthenticationResult auth; useCache = false)
         {
@@ -55,9 +55,7 @@ internal static partial class Extensions
             HttpResponseMessage responseMsg = await client.PostAsJsonAsync(Settings.Instance.EndpointUri, request, SerializerContext.Default.Request, cancellationToken);
             if (responseMsg.StatusCode is System.Net.HttpStatusCode.Forbidden) { continue; }
             responseMsg.EnsureSuccessStatusCode();
-            using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            cts.CancelAfter(Settings.Instance.Timeout);
-            Response? response = await responseMsg.Content.ReadFromJsonAsync(SerializerContext.Default.Response, cts.Token);
+            Response? response = await responseMsg.Content.ReadFromJsonAsync(SerializerContext.Default.Response, cancellationToken);
             return response ?? throw new InvalidDataException();
         }
         return null;
