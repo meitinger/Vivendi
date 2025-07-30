@@ -63,4 +63,26 @@ internal static partial class Extensions
         cache.RegisterCache(app.UserTokenCache);
         return app;
     }
+
+    public static async Task<T?> RunCancellableTaskAsync<T>(this IPublicClientApplication app, Func<bool> isCancelled, Func<IPublicClientApplication, CancellationToken, Task<T>> getter)
+    {
+        using CancellationTokenSource cancellation = new();
+        Task<T> task = getter(app, cancellation.Token);
+        while (true)
+        {
+            using CancellationTokenSource timeout = new(millisecondsDelay: 100);
+            try
+            {
+                return await task.WaitAsync(timeout.Token);
+            }
+            catch (OperationCanceledException ex) when (ex.CancellationToken == timeout.Token)
+            {
+                if (isCancelled()) { cancellation.Cancel(); }
+            }
+            catch (OperationCanceledException ex) when (ex.CancellationToken == cancellation.Token)
+            {
+                return default;
+            }
+        }
+    }
 }

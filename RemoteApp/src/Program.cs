@@ -41,36 +41,21 @@ try
         .Build()
         .EnableTokenCacheAsync();
 
-    // authenticate with Entra ID and fetch the remote app definition
-    Request request = new() { KnownFolders = KnownFolders.GetPaths() };
-    using CancellationTokenSource cancellation = new();
-    Task<Response> responseTask = app.CallEndpointAsync(request, cancellation.Token);
-    Response response;
-    while (true)
+    // authenticate with Entra ID and start the remote app
+    using Process? process = await app.RunCancellableTaskAsync(() => progress.IsCancelled, async (app, cancellationToken) =>
     {
-        using CancellationTokenSource timeout = new(millisecondsDelay: 100);
-        try
-        {
-            response = await responseTask.WaitAsync(timeout.Token);
-            break;
-        }
-        catch (OperationCanceledException ex) when (ex.CancellationToken == timeout.Token)
-        {
-            if (progress.IsCancelled) { cancellation.Cancel(); }
-        }
-        catch (OperationCanceledException ex) when (ex.CancellationToken == cancellation.Token)
-        {
-            Environment.ExitCode = Win32.ERROR_CANCELLED;
-            return;
-        }
+        Request request = new() { KnownFolders = await KnownFolders.GetCurrentAsync(cancellationToken) };
+        Response response = await app.CallEndpointAsync(request, cancellationToken);
+        return await Mstsc.StartRemoteAppAsync(response.UserName, response.Password, response.RdpFileContent, cancellationToken);
+    });
+    if (process is null)
+    {
+        Environment.ExitCode = Win32.ERROR_CANCELLED;
+        return;
     }
-
-    // launch the remote app
-    using Process process = Mstsc.StartRemoteApp(response.UserName, response.Password, response.RdpFileContent);
-    process.WaitForInputIdle();
     parent = process.MainWindowHandle;
     progress.Hide();
-    process.WaitForExit();
+    await process.WaitForExitAsync();
     Environment.ExitCode = process.ExitCode;
 }
 catch (Exception ex)

@@ -131,7 +131,11 @@ internal static partial class Win32
         }
         catch
         {
-            ComInterfaceMarshaller<T>.Free(ptr);
+            if (ptr is not null)
+            {
+                ComInterfaceMarshaller<T>.Free(ptr);
+                ptr = null;
+            }
             throw;
         }
     }

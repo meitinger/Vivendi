@@ -33,30 +33,33 @@ internal static partial class Mstsc
         int GetProcessId();
     }
 
-    public static unsafe Process StartRemoteApp(string userName, string password, byte[] rdpFileContent)
+    public static async Task<Process> StartRemoteAppAsync(string userName, string password, byte[] rdpFileContent, CancellationToken cancellationToken)
     {
-        void* ptr = null;
+        string rdpFileName = Path.GetTempFileName();
         try
         {
-            IMsRdpSessionManager manager = Win32.CreateInstance<IMsRdpSessionManager>(typeof(Mstsc).GUID, inProc: false, out ptr);
-            string rdpFileName = Path.GetTempFileName();
-            try
+            await File.WriteAllBytesAsync(rdpFileName, rdpFileContent, cancellationToken);
+            unsafe
             {
-                File.WriteAllBytes(rdpFileName, rdpFileContent);
-                manager.StartRemoteApplication([userName, password], [rdpFileName], 0);
+                void* ptr = null;
+                try
+                {
+                    IMsRdpSessionManager manager = Win32.CreateInstance<IMsRdpSessionManager>(typeof(Mstsc).GUID, inProc: false, out ptr);
+                    manager.StartRemoteApplication([userName, password], [rdpFileName], 0);
+                    return Process.GetProcessById(manager.GetProcessId());
+                }
+                finally
+                {
+                    if (ptr is not null)
+                    {
+                        ComInterfaceMarshaller<IMsRdpSessionManager>.Free(ptr);
+                    }
+                }
             }
-            finally
-            {
-                File.Delete(rdpFileName);
-            }
-            return Process.GetProcessById(manager.GetProcessId());
         }
         finally
         {
-            if (ptr is not null)
-            {
-                ComInterfaceMarshaller<IMsRdpSessionManager>.Free(ptr);
-            }
+            File.Delete(rdpFileName);
         }
     }
 }

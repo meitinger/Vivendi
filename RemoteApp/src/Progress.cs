@@ -22,7 +22,7 @@ using System.Runtime.InteropServices.Marshalling;
 namespace AufBauWerk.Vivendi.RemoteApp;
 
 [Guid("F8383852-FCD3-11d1-A6B9-006097DF5BD4")]
-internal unsafe partial class Progress : IDisposable
+internal partial class Progress : IDisposable
 {
     internal enum PROGDLG
     {
@@ -50,12 +50,12 @@ internal unsafe partial class Progress : IDisposable
         void Timer(uint timerAction, nint reserved = 0);
     }
 
-    private void* dialogPtr;
+    private unsafe void* dialogPtr;
     private IProgressDialog? dialogObj;
 
-    public Progress() => dialogObj = Win32.CreateInstance<IProgressDialog>(typeof(Progress).GUID, inProc: true, out dialogPtr);
+    public unsafe Progress() => dialogObj = Win32.CreateInstance<IProgressDialog>(typeof(Progress).GUID, inProc: true, out dialogPtr);
 
-    void IDisposable.Dispose()
+    unsafe void IDisposable.Dispose()
     {
         dialogObj = null;
         if (dialogPtr is not null)
@@ -71,7 +71,7 @@ internal unsafe partial class Progress : IDisposable
 
     public string Title { set => Interface.SetTitle(value); }
 
-    public nint Window => dialogPtr is null ? throw new ObjectDisposedException(nameof(IProgressDialog)) : Win32.GetWindowFromIUnknown(dialogPtr);
+    public unsafe nint Window => dialogPtr is null ? throw new ObjectDisposedException(nameof(IProgressDialog)) : Win32.GetWindowFromIUnknown(dialogPtr);
 
     public void Hide() => Interface.StopProgressDialog();
 

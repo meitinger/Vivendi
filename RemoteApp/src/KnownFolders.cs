@@ -47,11 +47,12 @@ internal static partial class KnownFolders
         new ("18989B1D-99B5-455B-841C-AB7C74E4DDFC"), //Videos
     ];
 
-    public static Dictionary<Guid, string> GetPaths()
+    public static async Task<Dictionary<Guid, string>> GetCurrentAsync(CancellationToken cancellationToken)
     {
         Dictionary<Guid, string> paths = [];
         foreach (Guid knownFolderId in AllowedIds)
         {
+            await Task.Delay(0, cancellationToken);
             if (0 <= SHGetKnownFolderPath(knownFolderId, KF_FLAG.DONT_VERIFY | KF_FLAG.NO_ALIAS | KF_FLAG.NO_PACKAGE_REDIRECTION, 0, out string? path) && path is not null && Path.IsPathFullyQualified(path))
             {
                 paths.Add(knownFolderId, path);
