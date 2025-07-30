@@ -28,6 +28,7 @@ internal sealed class CleanupService(ILogger<CleanupService> logger, Settings se
         {
             while (!stoppingToken.IsCancellationRequested)
             {
+                logger.LogTrace("Starting cleanup...");
                 using PrincipalContext context = new(ContextType.Machine);
                 using GroupPrincipal group = settings.FindSyncGroup(context);
                 foreach (UserPrincipal user in group.GetMembers().OfType<UserPrincipal>())
@@ -47,6 +48,7 @@ internal sealed class CleanupService(ILogger<CleanupService> logger, Settings se
                         logger.LogWarning(ex, "Maintenance for user '{User}' failed: {Message}", userName, ex.Message);
                     }
                 }
+                logger.LogTrace("Finished cleanup."); ;
                 await Task.Delay(settings.CleanupInterval, stoppingToken);
             }
         }

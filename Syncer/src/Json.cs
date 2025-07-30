@@ -34,7 +34,7 @@ internal class Credential
 internal class ExternalUser
 {
     public required string UserName { get; set; }
-    public required Dictionary<Guid, string> KnownPaths { get; set; }
+    public required Dictionary<Guid, string> KnownFolders { get; set; }
 }
 
 internal class Result

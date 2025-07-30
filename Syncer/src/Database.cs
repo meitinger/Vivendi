@@ -21,18 +21,24 @@ using System.Data;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal class Database(Settings settings)
+internal class Database(ILogger<Database> logger, Settings settings)
 {
     public async Task<bool> IsVivendiUserAsync(string userName, CancellationToken cancellationToken) => await GetVivendiCredentialAsync(userName, cancellationToken) is not null;
 
     public async Task<Credential?> GetVivendiCredentialAsync(string userName, CancellationToken cancellationToken)
     {
+        logger.LogTrace("Finding user '{UserName}'...", userName);
         using SqlConnection connection = new(settings.ConnectionString);
         using SqlCommand command = new(settings.QueryString, connection);
         await connection.OpenAsync(cancellationToken);
         command.Parameters.AddWithValue("@UserName", userName);
         using SqlDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SingleRow, cancellationToken);
-        if (!await reader.ReadAsync(cancellationToken)) { return null; }
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            logger.LogTrace("Found user '{UserName}'.", userName);
+            return null;
+        }
+        logger.LogTrace("User '{UserName}' not found.", userName);
         return new()
         {
             UserName = await reader.GetFieldValueAsync<string>("UserName", cancellationToken),

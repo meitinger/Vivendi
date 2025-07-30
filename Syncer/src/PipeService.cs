@@ -22,18 +22,17 @@ using System.Security.Principal;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal abstract class PipeService(string name, PipeDirection direction, Settings settings, ILogger<PipeService> logger) : BackgroundService
+internal abstract class PipeService(string name, PipeDirection direction, ILogger<PipeService> logger) : BackgroundService
 {
     private static readonly SecurityIdentifier LocalSystemSid = new(WellKnownSidType.LocalSystemSid, null);
 
     protected abstract IdentityReference ClientIdentity { get; }
 
-    protected Settings Settings => settings;
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         try
         {
+            logger.LogTrace("Opening named pipe...");
             PipeSecurity security = new();
             PipeAccessRights clientRights = ((direction & PipeDirection.In) is not 0 ? PipeAccessRights.Write : 0) | ((direction & PipeDirection.Out) is not 0 ? PipeAccessRights.Read : 0);
             security.AddAccessRule(new(LocalSystemSid, PipeAccessRights.FullControl, AccessControlType.Allow));
@@ -42,9 +41,9 @@ internal abstract class PipeService(string name, PipeDirection direction, Settin
             logger.LogInformation("Opened named pipe '{Pipe}' ({Direction}) for client '{Identity}'.", name, direction, ClientIdentity);
             while (!stoppingToken.IsCancellationRequested)
             {
-                logger.LogTrace("Wait for connection on pipe '{Pipe}'...", name);
+                logger.LogTrace("Waiting for connection...");
                 await stream.WaitForConnectionAsync(stoppingToken);
-                logger.LogTrace("Connection established on pipe '{Pipe}'.", name);
+                logger.LogTrace("Connection established.");
                 try
                 {
                     Result result;
@@ -54,23 +53,25 @@ internal abstract class PipeService(string name, PipeDirection direction, Settin
                     }
                     catch (Exception ex)
                     {
-                        logger.LogError(ex, "Request on pipe '{Pipe}' failed: {Message}", name, ex.Message);
+                        logger.LogError(ex, "Request failed.\nPipe={Pipe}\nDirection={Direction}\nIsConnected={IsConnected}\nCanRead={CanRead}\nCanWrite={CanWrite}\n\n{Message}", name, direction, stream.IsConnected, stream.CanRead, stream.CanWrite, ex.Message);
                         result = ex;
                     }
                     try
                     {
-                        await stream.SendMessageAsync(result, SerializerContext.Default.Result, Settings.MessageTimeout, stoppingToken);
+                        logger.LogTrace("Sending response (Error={Error}, UserName={UserName})...", result.Error, result.Credential?.UserName);
+                        await stream.SendMessageAsync(result, SerializerContext.Default.Result, stoppingToken);
+                        logger.LogTrace("Sent response.");
                     }
                     catch (IOException ex)
                     {
-                        logger.LogWarning(ex, "Send result on pipe '{Pipe}' failed: {Message}", name, ex.Message);
+                        logger.LogWarning(ex, "Send result failed: {Message}", ex.Message);
                     }
                 }
                 finally
                 {
-                    logger.LogTrace("Disconnect pipe '{Pipe}'...", name);
+                    logger.LogTrace("Disconnecting...");
                     stream.Disconnect();
-                    logger.LogTrace("Pipe '{Pipe}' disconnected.", name);
+                    logger.LogTrace("Disconnected.");
                 }
             }
         }

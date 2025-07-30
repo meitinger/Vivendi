@@ -27,6 +27,7 @@ namespace AufBauWerk.Vivendi.Syncer;
 
 internal static class Extensions
 {
+    private const int MessageTimeout = 1000;
     private static readonly SecurityIdentifier BuiltinAdministratorsSid = new(WellKnownSidType.BuiltinAdministratorsSid, null);
 
     public static void EnsureNotAdministrator(this UserPrincipal user)
@@ -44,44 +45,46 @@ internal static class Extensions
         Environment.Exit(1);
     }
 
-    public static async Task<T?> ReceiveMessageAsync<T>(this PipeStream stream, JsonTypeInfo<T> jsonTypeInfo, TimeSpan timeout, CancellationToken cancellationToken)
+    public static async Task<T?> ReceiveMessageAsync<T>(this PipeStream stream, JsonTypeInfo<T> jsonTypeInfo, CancellationToken cancellationToken)
     {
+        using MemoryStream memoryStream = new();
         using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(timeout);
+        cts.CancelAfter(MessageTimeout);
         try
         {
-            byte[] buffer = new byte[1024];
-            using MemoryStream memoryStream = new();
+            byte[] buffer = new byte[4096];
             do
             {
                 int read = await stream.ReadAsync(buffer, cts.Token);
                 memoryStream.Write(buffer, 0, read);
             } while (!stream.IsMessageComplete);
-            memoryStream.Position = 0;
-
-            return await JsonSerializer.DeserializeAsync(memoryStream, jsonTypeInfo, cts.Token);
-        }
-        catch (JsonException ex)
-        {
-            throw new IOException(ex.Message, ex);
         }
         catch (OperationCanceledException ex) when (ex.CancellationToken == cts.Token)
         {
             throw new IOException(ex.Message, ex);
         }
-    }
-
-    public static async Task SendMessageAsync<T>(this PipeStream stream, T message, JsonTypeInfo<T> jsonTypeInfo, TimeSpan timeout, CancellationToken cancellationToken)
-    {
-        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        cts.CancelAfter(timeout);
         try
         {
-            await stream.WriteAsync(JsonSerializer.SerializeToUtf8Bytes(message, jsonTypeInfo), cts.Token);
+            return JsonSerializer.Deserialize(memoryStream.GetBuffer().AsSpan(0, (int)memoryStream.Length), jsonTypeInfo);
         }
         catch (JsonException ex)
         {
             throw new IOException(ex.Message, ex);
+        }
+    }
+
+    public static async Task SendMessageAsync<T>(this PipeStream stream, T value, JsonTypeInfo<T> jsonTypeInfo, CancellationToken cancellationToken)
+    {
+        byte[] message = JsonSerializer.SerializeToUtf8Bytes(value, jsonTypeInfo);
+        if (64 * 1024 < message.Length)
+        {
+            throw new IOException($"Message too big ({message.Length} bytes).");
+        }
+        using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        cts.CancelAfter(MessageTimeout);
+        try
+        {
+            await stream.WriteAsync(message, cts.Token);
         }
         catch (OperationCanceledException ex) when (ex.CancellationToken == cts.Token)
         {

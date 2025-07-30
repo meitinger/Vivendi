@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using System.ComponentModel;
+using System.Diagnostics.CodeAnalysis;
 using System.DirectoryServices.AccountManagement;
 using System.Runtime.InteropServices;
 using System.Security.Principal;
@@ -80,17 +80,17 @@ internal unsafe partial class Sessions(ILogger<Sessions> logger)
 
     #endregion
 
-    private static void ThrowExceptionForWin32(bool success)
-    {
-        if (!success) { throw new Win32Exception(); }
-    }
-
-    private SecurityIdentifier GetSidFromSession(uint sessionId)
+    private bool TryGetSidFromSession(uint sessionId, [NotNullWhen(true)] out SecurityIdentifier? sid)
     {
         nint token = 0;
         try
         {
-            ThrowExceptionForWin32(WTSQueryUserToken(sessionId, &token));
+            if (!WTSQueryUserToken(sessionId, &token))
+            {
+                logger.LogWarning("Query user token for session #{SessionId} failed: {Message}", sessionId, Marshal.GetLastPInvokeErrorMessage());
+                sid = null;
+                return false;
+            }
             uint size = 100;
         Resize:
             byte[] buffer = new byte[size];
@@ -98,10 +98,26 @@ internal unsafe partial class Sessions(ILogger<Sessions> logger)
             {
                 if (!GetTokenInformation(token, TOKEN_INFORMATION_CLASS.TokenUser, ptr, size, &size))
                 {
-                    ThrowExceptionForWin32(Marshal.GetLastPInvokeError() is ERROR_INSUFFICIENT_BUFFER && buffer.Length < size);
+                    if (Marshal.GetLastPInvokeError() is not ERROR_INSUFFICIENT_BUFFER || size <= buffer.Length)
+                    {
+                        logger.LogWarning("Get user token information for session #{SessionId} failed: {Message}", sessionId, Marshal.GetLastPInvokeErrorMessage());
+                        sid = null;
+                        return false;
+                    }
                     goto Resize;
                 }
-                return new SecurityIdentifier(buffer, (int)(((TOKEN_USER*)ptr)->User.Sid - ptr));
+                try
+                {
+                    sid = new(buffer, (int)(((TOKEN_USER*)ptr)->User.Sid - ptr));
+                    return true;
+                }
+                catch (ArgumentException ex)
+                {
+                    // this should not happen
+                    logger.LogError("Read user token SID for session #{SessionId} failed: {Message}", sessionId, ex.Message);
+                    sid = null;
+                    return false;
+                }
             }
         }
         finally
@@ -110,7 +126,8 @@ internal unsafe partial class Sessions(ILogger<Sessions> logger)
             {
                 if (!CloseHandle(token))
                 {
-                    logger.LogWarning("Release user token for session #{SessionId} failed: {Message}", sessionId, Marshal.GetLastPInvokeErrorMessage());
+                    // this should never happen
+                    logger.LogCritical("Release user token for session #{SessionId} failed: {Message}", sessionId, Marshal.GetLastPInvokeErrorMessage());
                 }
             }
         }
@@ -122,16 +139,30 @@ internal unsafe partial class Sessions(ILogger<Sessions> logger)
         uint count = 0;
         try
         {
-            ThrowExceptionForWin32(WTSEnumerateSessionsW(WTS_CURRENT_SERVER_HANDLE, reserved: 0, version: 1, &sessionInfos, &count));
+            logger.LogTrace("Enumerate terminal sessions...");
+            if (!WTSEnumerateSessionsW(WTS_CURRENT_SERVER_HANDLE, reserved: 0, version: 1, &sessionInfos, &count))
+            {
+                // this should not happen
+                logger.LogError("Enumerate terminal sessions failed: {Message}", Marshal.GetLastPInvokeErrorMessage());
+                return;
+            }
             for (uint i = 0; i < count; i++)
             {
                 WTS_SESSION_INFOW sessionInfo = sessionInfos[i];
-                if (sessionInfo.State is not WTS_CONNECTSTATE_CLASS.Active || GetSidFromSession(sessionInfo.SessionId) != user.Sid)
+                if (sessionInfo.State is not WTS_CONNECTSTATE_CLASS.Active || !TryGetSidFromSession(sessionInfo.SessionId, out var sid) || sid != user.Sid)
                 {
                     continue;
                 }
-                ThrowExceptionForWin32(WTSDisconnectSession(WTS_CURRENT_SERVER_HANDLE, sessionInfo.SessionId, wait));
+                if (!WTSDisconnectSession(WTS_CURRENT_SERVER_HANDLE, sessionInfo.SessionId, wait))
+                {
+                    logger.LogWarning("Disconnect user '{User}' from terminal session #{SessionId} failed: {Message}", user.Name, sessionInfo.SessionId, Marshal.GetLastPInvokeErrorMessage());
+                }
+                else
+                {
+                    logger.LogTrace("Disconnected user '{User}' from terminal sessions #{SessionId}.", user.Name, sessionInfo.SessionId);
+                }
             }
+            logger.LogTrace("Enumerated {Count} terminal sessions.", count);
         }
         finally
         {

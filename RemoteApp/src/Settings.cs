@@ -25,7 +25,6 @@ internal interface ISettings
     string CacheFileName { get; }
     Uri EndpointUri { get; }
     string TenantId { get; }
-    TimeSpan Timeout { get; }
     string Title { get; }
 }
 

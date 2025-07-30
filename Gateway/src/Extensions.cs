@@ -33,8 +33,8 @@ internal static partial class Extensions
             if (context.User?.Identity?.Name is not string userName) { return Results.Challenge(); }
             Request? request = await context.Request.ReadFromJsonAsync(SerializerContext.Default.Request, context.RequestAborted);
             if (request is null) { return Results.BadRequest(); }
-            if (!request.KnownPaths.Values.All(Path.IsPathFullyQualified)) { return Results.BadRequest(); }
-            ExternalUser externalUser = new() { UserName = userName, KnownPaths = request.KnownPaths };
+            if (!request.KnownFolders.Values.All(Path.IsPathFullyQualified)) { return Results.BadRequest(); }
+            ExternalUser externalUser = new() { UserName = userName, KnownFolders = request.KnownFolders };
             byte[] message = JsonSerializer.SerializeToUtf8Bytes(externalUser, SerializerContext.Default.ExternalUser);
             if (64 * 1024 < message.Length) { return Results.BadRequest(); }
 

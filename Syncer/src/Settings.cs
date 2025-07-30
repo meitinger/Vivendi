@@ -53,7 +53,6 @@ internal class Settings(IConfiguration configuration)
     public string ConnectionString => Get<string>();
     private string GatewayUser => Get<string>();
     public IdentityReference GatewayUserIdentity => GetIdentity(GatewayUser);
-    public TimeSpan MessageTimeout => Get(TimeSpan.FromSeconds(5));
     public char[] PasswordChars => Get(DefaultPasswordChars);
     public int PasswordLength => Get(25);
     public string QueryString => Get<string>();

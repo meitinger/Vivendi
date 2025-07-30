@@ -21,16 +21,18 @@ using System.Security.Principal;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal sealed class LauncherService(ILogger<LauncherService> logger, Settings settings, Database database) : PipeService("VivendiLauncher", PipeDirection.Out, settings, logger)
+internal sealed class LauncherService(ILogger<LauncherService> logger, Settings settings, Database database) : PipeService("VivendiLauncher", PipeDirection.Out, logger)
 {
-    protected override IdentityReference ClientIdentity => Settings.SyncGroupIdentity;
+    protected override IdentityReference ClientIdentity => settings.SyncGroupIdentity;
 
     protected override async Task<Result> ExecuteAsync(NamedPipeServerStream stream, CancellationToken stoppingToken)
     {
         string userName;
         try
         {
+            logger.LogTrace("Getting pipe user name...");
             userName = stream.GetImpersonationUserName();
+            logger.LogTrace("Got pipe user name ({UserName}).", userName);
         }
         catch (IOException ex)
         {

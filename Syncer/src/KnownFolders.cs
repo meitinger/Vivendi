@@ -16,7 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
@@ -88,15 +87,11 @@ internal unsafe partial class KnownFolders(ILogger<KnownFolders> logger)
     [GeneratedRegex(@"^([a-zA-Z]):")]
     private static partial Regex GetDriveLetterRegex();
 
-    private static void ThrowExceptionForWin32(bool success)
-    {
-        if (!success) { throw new Win32Exception(); }
-    }
-
     public void RedirectForUser(Credential user, IReadOnlyDictionary<Guid, string> redirects)
     {
         fixed (char* userName = user.UserName)
         {
+            int hr;
             nint token = 0;
             PROFILEINFOW profileInfo = new()
             {
@@ -106,8 +101,17 @@ internal unsafe partial class KnownFolders(ILogger<KnownFolders> logger)
             };
             try
             {
-                ThrowExceptionForWin32(LogonUserW(user.UserName, ".", user.Password, LOGON32_LOGON.INTERACTIVE, LOGON32_PROVIDER.DEFAULT, &token));
-                ThrowExceptionForWin32(LoadUserProfileW(token, &profileInfo));
+                logger.LogTrace("Redirecting known folders for user '{User}'...", user.UserName);
+                if (!LogonUserW(user.UserName, ".", user.Password, LOGON32_LOGON.INTERACTIVE, LOGON32_PROVIDER.DEFAULT, &token))
+                {
+                    logger.LogWarning("Logon user '{User}' failed: {Message}", user.UserName, Marshal.GetLastPInvokeErrorMessage());
+                    return;
+                }
+                if (!LoadUserProfileW(token, &profileInfo))
+                {
+                    logger.LogWarning("Load profile for user '{User}' failed: {Message}", user.UserName, Marshal.GetLastPInvokeErrorMessage());
+                    return;
+                }
                 foreach (Guid knownFolderId in AllowedIds)
                 {
                     if (redirects.TryGetValue(knownFolderId, out string? path))
@@ -116,15 +120,22 @@ internal unsafe partial class KnownFolders(ILogger<KnownFolders> logger)
                     }
                     else
                     {
-                        int hr = SHGetKnownFolderPath(knownFolderId, KNOWN_FOLDER_FLAG.DONT_VERIFY | KNOWN_FOLDER_FLAG.DEFAULT_PATH | KNOWN_FOLDER_FLAG.NOT_PARENT_RELATIVE, token, out path);
-                        if (hr < 0 || path is null)
+                        if ((hr = SHGetKnownFolderPath(knownFolderId, KNOWN_FOLDER_FLAG.DONT_VERIFY | KNOWN_FOLDER_FLAG.DEFAULT_PATH | KNOWN_FOLDER_FLAG.NOT_PARENT_RELATIVE, token, out path)) < 0 || path is null)
                         {
-                            logger.LogWarning("Retrieve default path of known folder {KnownFolderId} for user '{User}' failed: {Message}", knownFolderId, user.UserName, Marshal.GetPInvokeErrorMessage(hr));
+                            logger.LogWarning("Get known folder {KnownFolderId} for user '{User}' failed: {Message}", knownFolderId, user.UserName, Marshal.GetPInvokeErrorMessage(hr));
                             continue;
                         }
                     }
-                    Marshal.ThrowExceptionForHR(SHSetKnownFolderPath(knownFolderId, 0, token, path));
+                    if ((hr = SHSetKnownFolderPath(knownFolderId, 0, token, path)) < 0)
+                    {
+                        logger.LogWarning("Set known folder {KnownFolderId} to path '{Path}' for user '{User}' failed: {Message}", knownFolderId, path, user.UserName, Marshal.GetPInvokeErrorMessage(hr));
+                    }
+                    else
+                    {
+                        logger.LogTrace("Redirect known folder {KnownFolderId} for user '{User}' to path '{Path}'.", knownFolderId, user.UserName, path);
+                    }
                 }
+                logger.LogTrace("Redirected known folders for user '{User}'.", user.UserName);
             }
             finally
             {
@@ -134,12 +145,12 @@ internal unsafe partial class KnownFolders(ILogger<KnownFolders> logger)
                     {
                         if (!UnloadUserProfile(token, profileInfo.Profile))
                         {
-                            logger.LogWarning("Unload profile for user '{User}' failed: {Message}", user.UserName, Marshal.GetLastPInvokeErrorMessage());
+                            logger.LogError("Unload profile for user '{User}' failed: {Message}", user.UserName, Marshal.GetLastPInvokeErrorMessage());
                         }
                     }
                     if (!CloseHandle(token))
                     {
-                        logger.LogWarning("Logoff user '{User}' failed: {Message}", user.UserName, Marshal.GetLastPInvokeErrorMessage());
+                        logger.LogError("Logoff user '{User}' failed: {Message}", user.UserName, Marshal.GetLastPInvokeErrorMessage());
                     }
                 }
             }

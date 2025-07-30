@@ -21,35 +21,63 @@ using Microsoft.Identity.Client;
 using Microsoft.Identity.Client.Broker;
 using System.Diagnostics;
 
+nint parent = 0;
 try
 {
+    // show the progress dialog
+    using Progress progress = new();
+    progress.Title = Settings.Instance.Title;
+    progress.Show();
+    parent = progress.Window;
+    if (parent is 0) { parent = Win32.GetDesktopWindow(); }
+
     // create the local app using WAM
     IPublicClientApplication app = await PublicClientApplicationBuilder
         .Create(Settings.Instance.ApplicationId)
         .WithTenantId(Settings.Instance.TenantId)
         .WithDefaultRedirectUri()
-        .WithDesktopAsParent()
+        .WithParentActivityOrWindow(() => parent)
         .WithBroker(new BrokerOptions(BrokerOptions.OperatingSystems.Windows) { Title = Settings.Instance.Title })
         .Build()
         .EnableTokenCacheAsync();
 
     // authenticate with Entra ID and fetch the remote app definition
-    Request request = new() { KnownPaths = KnownFolders.GetPaths() };
-    using CancellationTokenSource cts = new(Settings.Instance.Timeout);
-    if (await app.CallEndpointAsync(request, cts.Token) is not Response response)
+    Request request = new() { KnownFolders = KnownFolders.GetPaths() };
+    using CancellationTokenSource cancellation = new();
+    Task<Response> responseTask = app.CallEndpointAsync(request, cancellation.Token);
+    Response response;
+    while (true)
     {
-        Environment.ExitCode = Win32.ERROR_CANCELLED;
-        return;
+        using CancellationTokenSource timeout = new(millisecondsDelay: 100);
+        try
+        {
+            response = await responseTask.WaitAsync(timeout.Token);
+            break;
+        }
+        catch (OperationCanceledException ex) when (ex.CancellationToken == timeout.Token)
+        {
+            if (progress.IsCancelled) { cancellation.Cancel(); }
+        }
+        catch (OperationCanceledException ex) when (ex.CancellationToken == cancellation.Token)
+        {
+            Environment.ExitCode = Win32.ERROR_CANCELLED;
+            return;
+        }
     }
 
     // launch the remote app
     using Process process = Mstsc.StartRemoteApp(response.UserName, response.Password, response.RdpFileContent);
+    process.WaitForInputIdle();
+    parent = process.MainWindowHandle;
+    progress.Hide();
     process.WaitForExit();
     Environment.ExitCode = process.ExitCode;
 }
 catch (Exception ex)
 {
     Console.WriteLine(ex);
-    Win32.ShowError(ex.Message);
+    Console.WriteLine(parent);
+    Win32.ShowError(parent, ex.Message);
+    Console.WriteLine("ehefghfhfggfehe");
     Environment.ExitCode = ex.HResult;
 }

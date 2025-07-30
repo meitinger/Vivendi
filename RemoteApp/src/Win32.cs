@@ -93,6 +93,15 @@ internal static partial class Win32
         }
     }
 
+    public const int ERROR_CANCELLED = 1223;
+
+    [Flags]
+    private enum CLSCTX
+    {
+        INPROC_SERVER = 0x1,
+        LOCAL_SERVER = 0x4,
+    }
+
     [Flags]
     private enum MB
     {
@@ -101,10 +110,43 @@ internal static partial class Win32
         SETFOREGROUND = 0x00010000,
     }
 
-    public const int ERROR_CANCELLED = 1223;
+    [LibraryImport("ole32.dll")]
+    private static unsafe partial int CoCreateInstance(in Guid classId, nint unknownOuter, CLSCTX context, in Guid interfaceId, out void* ptr);
+
+    [LibraryImport("user32.dll")]
+    public static partial nint GetDesktopWindow();
+
+    [LibraryImport("shlwapi.dll")]
+    private static unsafe partial int IUnknown_GetWindow(void* unknown, out nint window);
 
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     private static partial int MessageBoxW(nint window, string text, string? caption, MB type);
 
-    public static void ShowError(string message) => MessageBoxW(0, message, Settings.Instance.Title, MB.OK | MB.ICONERROR | MB.SETFOREGROUND);
+    public static unsafe T CreateInstance<T>(in Guid classId, bool inProc, out void* ptr)
+    {
+        Marshal.ThrowExceptionForHR(CoCreateInstance(classId, 0, inProc ? CLSCTX.INPROC_SERVER : CLSCTX.LOCAL_SERVER, typeof(T).GUID, out ptr));
+        try
+        {
+            return ComInterfaceMarshaller<T>.ConvertToManaged(ptr) ?? throw new NullReferenceException();
+        }
+        catch
+        {
+            ComInterfaceMarshaller<T>.Free(ptr);
+            throw;
+        }
+    }
+
+    public static unsafe nint GetWindowFromIUnknown(void* obj)
+    {
+        ArgumentNullException.ThrowIfNull(obj);
+        int hr = IUnknown_GetWindow(obj, out nint window);
+        if (hr < 0)
+        {
+            Console.Error.WriteLine(Marshal.GetPInvokeErrorMessage(hr));
+            return 0;
+        }
+        return window;
+    }
+
+    public static void ShowError(nint parentWindow, string message) => MessageBoxW(parentWindow, message, Settings.Instance.Title, MB.OK | MB.ICONERROR | MB.SETFOREGROUND);
 }

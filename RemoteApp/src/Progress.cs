@@ -1,0 +1,79 @@
+﻿/*
+ * AufBauWerk Erweiterungen für Vivendi
+ * Copyright (C) 2024  Manuel Meitinger
+ * 
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.Marshalling;
+
+namespace AufBauWerk.Vivendi.RemoteApp;
+
+[Guid("F8383852-FCD3-11d1-A6B9-006097DF5BD4")]
+internal unsafe partial class Progress : IDisposable
+{
+    internal enum PROGDLG
+    {
+        NOTIME = 0x00000004,
+        NOMINIMIZE = 0x00000008,
+        MARQUEEPROGRESS = 0x00000020,
+        DONTDISPLAYLOCATIONS = 0x00001000,
+    }
+
+    [GeneratedComInterface(StringMarshalling = StringMarshalling.Utf16)]
+    [Guid("EBBC7C04-315E-11d2-B62F-006097DF5BD4")]
+    internal partial interface IProgressDialog
+    {
+        void StartProgressDialog(nint windowParent, nint unknownEnableModless, PROGDLG flags, nint reserved = 0);
+        void StopProgressDialog();
+        void SetTitle(string title);
+        void SetAnimation(nint instanceAnimation, uint idAnimation);
+        [PreserveSig]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        bool HasUserCancelled();
+        void SetProgress(uint completed, uint total);
+        void SetProgress64(ulong completed, ulong total);
+        void SetLine(uint lineNumber, string str, [MarshalAs(UnmanagedType.Bool)] bool compactPath, nint reserved = 0);
+        void SetCancelMsg(string cancelMsg, nint reserved = 0);
+        void Timer(uint timerAction, nint reserved = 0);
+    }
+
+    private void* dialogPtr;
+    private IProgressDialog? dialogObj;
+
+    public Progress() => dialogObj = Win32.CreateInstance<IProgressDialog>(typeof(Progress).GUID, inProc: true, out dialogPtr);
+
+    void IDisposable.Dispose()
+    {
+        dialogObj = null;
+        if (dialogPtr is not null)
+        {
+            ComInterfaceMarshaller<IProgressDialog>.Free(dialogPtr);
+            dialogPtr = null;
+        }
+    }
+
+    private IProgressDialog Interface => dialogObj ?? throw new ObjectDisposedException(nameof(IProgressDialog));
+
+    public bool IsCancelled => Interface.HasUserCancelled();
+
+    public string Title { set => Interface.SetTitle(value); }
+
+    public nint Window => dialogPtr is null ? throw new ObjectDisposedException(nameof(IProgressDialog)) : Win32.GetWindowFromIUnknown(dialogPtr);
+
+    public void Hide() => Interface.StopProgressDialog();
+
+    public void Show() => Interface.StartProgressDialog(0, 0, PROGDLG.NOTIME | PROGDLG.NOMINIMIZE | PROGDLG.MARQUEEPROGRESS | PROGDLG.DONTDISPLAYLOCATIONS);
+}

@@ -22,18 +22,9 @@ using System.Runtime.InteropServices.Marshalling;
 
 namespace AufBauWerk.Vivendi.RemoteApp;
 
+[Guid("6B7F33AC-D91D-4563-BF36-0ACCB24E66FB")]
 internal static partial class Mstsc
 {
-    #region Win32
-
-    private static readonly Guid CLSID_MsRdpSessionManagerSingleUseClass = new("6B7F33AC-D91D-4563-BF36-0ACCB24E66FB");
-
-    [Flags]
-    private enum CLSCTX
-    {
-        LOCAL_SERVER = 0x4,
-    }
-
     [GeneratedComInterface]
     [Guid("A0B2DD9A-7F53-4E65-8547-851952EC8C96")]
     internal partial interface IMsRdpSessionManager
@@ -42,17 +33,12 @@ internal static partial class Mstsc
         int GetProcessId();
     }
 
-    [LibraryImport("ole32.dll")]
-    private static unsafe partial int CoCreateInstance(in Guid classId, void* unknownOuter, CLSCTX context, in Guid interfaceId, out void* ptr);
-
-    #endregion
-
     public static unsafe Process StartRemoteApp(string userName, string password, byte[] rdpFileContent)
     {
-        Marshal.ThrowExceptionForHR(CoCreateInstance(CLSID_MsRdpSessionManagerSingleUseClass, null, CLSCTX.LOCAL_SERVER, typeof(IMsRdpSessionManager).GUID, out void* managerPtr));
+        void* ptr = null;
         try
         {
-            IMsRdpSessionManager manager = ComInterfaceMarshaller<IMsRdpSessionManager>.ConvertToManaged(managerPtr) ?? throw new NullReferenceException();
+            IMsRdpSessionManager manager = Win32.CreateInstance<IMsRdpSessionManager>(typeof(Mstsc).GUID, inProc: false, out ptr);
             string rdpFileName = Path.GetTempFileName();
             try
             {
@@ -67,7 +53,10 @@ internal static partial class Mstsc
         }
         finally
         {
-            ComInterfaceMarshaller<IMsRdpSessionManager>.Free(managerPtr);
+            if (ptr is not null)
+            {
+                ComInterfaceMarshaller<IMsRdpSessionManager>.Free(ptr);
+            }
         }
     }
 }

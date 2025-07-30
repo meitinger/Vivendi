@@ -22,7 +22,7 @@ using System.Security.Principal;
 
 namespace AufBauWerk.Vivendi.Syncer;
 
-internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Settings settings, Database database, KnownFolders knownFolders, Sessions sessions) : PipeService("VivendiRemoteApp", PipeDirection.InOut, settings, logger)
+internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Settings settings, Database database, KnownFolders knownFolders, Sessions sessions) : PipeService("VivendiRemoteApp", PipeDirection.InOut, logger)
 {
     private static readonly SecurityIdentifier BuiltinRemoteDesktopUsersSid = new(WellKnownSidType.BuiltinRemoteDesktopUsersSid, null);
 
@@ -33,7 +33,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         {
             bool unmodified =
                 user.Enabled is true &&
-                user.Description == Settings.UserDescription &&
+                user.Description == settings.UserDescription &&
                 user.DisplayName == externalUser.UserName &&
                 user.PasswordNeverExpires is true &&
                 user.PasswordNotRequired is false &&
@@ -41,7 +41,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
             if (unmodified) { return false; }
         }
         user.Enabled = true;
-        user.Description = Settings.UserDescription;
+        user.Description = settings.UserDescription;
         user.DisplayName = externalUser.UserName;
         user.PasswordNeverExpires = true;
         user.PasswordNotRequired = false;
@@ -49,14 +49,16 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         return true;
     }
 
-    protected override IdentityReference ClientIdentity => Settings.GatewayUserIdentity;
+    protected override IdentityReference ClientIdentity => settings.GatewayUserIdentity;
 
     protected override async Task<Result> ExecuteAsync(NamedPipeServerStream stream, CancellationToken stoppingToken)
     {
         ExternalUser externalUser;
         try
         {
-            externalUser = await stream.ReceiveMessageAsync(SerializerContext.Default.ExternalUser, Settings.MessageTimeout, stoppingToken) ?? throw new InvalidDataException();
+            logger.LogTrace("Receiving request...");
+            externalUser = await stream.ReceiveMessageAsync(SerializerContext.Default.ExternalUser, stoppingToken) ?? throw new InvalidDataException();
+            logger.LogTrace("Received request (UserName={UserName}, KnownFoldersCount={KnownFoldersCount}).", externalUser.UserName, externalUser.KnownFolders.Count);
         }
         catch (IOException ex)
         {
@@ -67,9 +69,9 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         int separator = userName.LastIndexOf('@');
         if (-1 < separator) { userName = userName[..separator]; }
         if (!await database.IsVivendiUserAsync(userName, stoppingToken)) { return Result.Forbid(); }
-        string password = new(Random.Shared.GetItems(Settings.PasswordChars, Settings.PasswordLength));
+        string password = new(Random.Shared.GetItems(settings.PasswordChars, settings.PasswordLength));
         using PrincipalContext context = new(ContextType.Machine);
-        using GroupPrincipal group = Settings.FindSyncGroup(context);
+        using GroupPrincipal group = settings.FindSyncGroup(context);
         using GroupPrincipal rdpUsers = GroupPrincipal.FindByIdentity(context, IdentityType.Sid, BuiltinRemoteDesktopUsersSid.Value);
         UserPrincipal? user = null;
         try
@@ -77,6 +79,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
             user = UserPrincipal.FindByIdentity(context, IdentityType.SamAccountName, userName);
             if (user is null)
             {
+                logger.LogTrace("Creating user '{User}'...", userName);
                 user = new(context, samAccountName: userName, password: password, enabled: true);
                 UpdateUserProperties(user, externalUser, checkIfNeeded: false);
                 user.Save();
@@ -92,10 +95,11 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
                     user.Delete();
                     throw;
                 }
-                logger.LogInformation("User '{User}' created.", user.Name);
+                logger.LogInformation("User '{User}' created.", userName);
             }
             else if (user.IsMemberOf(group))
             {
+                logger.LogTrace("Updating existing user '{User}'...", userName);
                 user.EnsureNotAdministrator();
                 sessions.DisconnectForUser(user, wait: false);
                 user.SetPassword(password);
@@ -103,7 +107,11 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
                 user.Save();
                 if (updated)
                 {
-                    logger.LogInformation("User '{User}' updated.", user.Name);
+                    logger.LogInformation("User '{User}' updated.", userName);
+                }
+                else
+                {
+                    logger.LogTrace("User '{User}' already up-to-date.", userName);
                 }
             }
             else
@@ -111,12 +119,12 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
                 throw new PrincipalOperationException("Not allowed for unsynced users.");
             }
             Credential credential = new() { UserName = userName, Password = password };
-            knownFolders.RedirectForUser(credential, externalUser.KnownPaths);
+            knownFolders.RedirectForUser(credential, externalUser.KnownFolders);
             return credential;
         }
         catch (PrincipalException ex)
         {
-            logger.LogWarning(ex, "Setup for user '{User}' failed: {Message}", userName, ex.Message);
+            logger.LogWarning(ex, "Setup account for user '{User}' failed: {Message}", userName, ex.Message);
             return ex;
         }
         finally
