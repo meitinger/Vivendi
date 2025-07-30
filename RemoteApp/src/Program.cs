@@ -75,9 +75,6 @@ try
 }
 catch (Exception ex)
 {
-    Console.WriteLine(ex);
-    Console.WriteLine(parent);
     Win32.ShowError(parent, ex.Message);
-    Console.WriteLine("ehefghfhfggfehe");
     Environment.ExitCode = ex.HResult;
 }
