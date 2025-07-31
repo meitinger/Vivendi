@@ -205,7 +205,7 @@ public sealed class OpenOlat : ControllerBase, IDisposable
         ManagedUser? user = await ExecuteQueryAsync(userName, password, HttpContext.RequestAborted);
         if (user is null)
         {
-            return Results.Forbid();
+            return Results.Unauthorized();
         }
         await UpsertUserAsync(user, HttpContext.RequestAborted);
         return Results.Ok(new { success = true });
