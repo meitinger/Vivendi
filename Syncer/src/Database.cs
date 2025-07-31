@@ -35,10 +35,10 @@ internal class Database(ILogger<Database> logger, Settings settings)
         using SqlDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SingleRow, cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
         {
-            logger.LogTrace("Found user '{UserName}'.", userName);
+            logger.LogTrace("User '{UserName}' not found.", userName);
             return null;
         }
-        logger.LogTrace("User '{UserName}' not found.", userName);
+        logger.LogTrace("Found user '{UserName}'.", userName);
         return new()
         {
             UserName = await reader.GetFieldValueAsync<string>("UserName", cancellationToken),

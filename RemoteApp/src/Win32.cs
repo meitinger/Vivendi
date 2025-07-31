@@ -88,7 +88,11 @@ internal static partial class Win32
         {
             if (unmanaged is not null)
             {
-                Marshal.ThrowExceptionForHR(SafeArrayDestroy((SAFEARRAY*)unmanaged));
+                int hr = SafeArrayDestroy((SAFEARRAY*)unmanaged);
+                if (hr < 0)
+                {
+                    Console.Error.WriteLine(Marshal.GetPInvokeErrorMessage(hr));
+                }
             }
         }
     }
@@ -131,11 +135,8 @@ internal static partial class Win32
         }
         catch
         {
-            if (ptr is not null)
-            {
-                ComInterfaceMarshaller<T>.Free(ptr);
-                ptr = null;
-            }
+            ComInterfaceMarshaller<T>.Free(ptr);
+            ptr = null;
             throw;
         }
     }

@@ -44,7 +44,7 @@ internal static partial class KnownFolders
         new("374DE290-123F-4565-9164-39C4925E467B"), //Downloads
         new("4BD8D571-6D19-48D3-BE97-422220080E43"), //Music
         new("33E28130-4E1E-4676-835A-98395C3BC3BB"), //Pictures
-        new ("18989B1D-99B5-455B-841C-AB7C74E4DDFC"), //Videos
+        new("18989B1D-99B5-455B-841C-AB7C74E4DDFC"), //Videos
     ];
 
     public static async Task<Dictionary<Guid, string>> GetCurrentAsync(CancellationToken cancellationToken)
@@ -53,10 +53,17 @@ internal static partial class KnownFolders
         foreach (Guid knownFolderId in AllowedIds)
         {
             await Task.Delay(0, cancellationToken);
-            if (0 <= SHGetKnownFolderPath(knownFolderId, KF_FLAG.DONT_VERIFY | KF_FLAG.NO_ALIAS | KF_FLAG.NO_PACKAGE_REDIRECTION, 0, out string? path) && path is not null && Path.IsPathFullyQualified(path))
+            int hr = SHGetKnownFolderPath(knownFolderId, KF_FLAG.DONT_VERIFY | KF_FLAG.NO_ALIAS | KF_FLAG.NO_PACKAGE_REDIRECTION, 0, out string? path);
+            if (hr < 0)
             {
-                paths.Add(knownFolderId, path);
+                Console.Error.WriteLine(Marshal.GetPInvokeErrorMessage(hr));
+                continue;
             }
+            if (path is null || !Path.IsPathFullyQualified(path))
+            {
+                continue;
+            }
+            paths.Add(knownFolderId, path);
         }
         return paths;
     }

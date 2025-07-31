@@ -33,8 +33,14 @@ internal static partial class Extensions
             try { return await app.AcquireTokenSilent(scopes, account).ExecuteAsync(cancellationToken); }
             catch (MsalUiRequiredException) { }
         }
-        try { return await app.AcquireTokenInteractive(scopes).ExecuteAsync(cancellationToken); }
-        catch (MsalClientException ex) when (ex.ErrorCode is MsalError.AuthenticationCanceledError) { throw new OperationCanceledException(cancellationToken); }
+        try
+        {
+            return await app.AcquireTokenInteractive(scopes).ExecuteAsync(cancellationToken);
+        }
+        catch (MsalClientException ex) when (ex.ErrorCode is MsalError.AuthenticationCanceledError)
+        {
+            throw new OperationCanceledException(cancellationToken);
+        }
     }
 
     public static async Task<Response> CallEndpointAsync(this IPublicClientApplication app, Request request, CancellationToken cancellationToken = default)

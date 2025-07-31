@@ -58,11 +58,8 @@ internal partial class Progress : IDisposable
     unsafe void IDisposable.Dispose()
     {
         dialogObj = null;
-        if (dialogPtr is not null)
-        {
-            ComInterfaceMarshaller<IProgressDialog>.Free(dialogPtr);
-            dialogPtr = null;
-        }
+        ComInterfaceMarshaller<IProgressDialog>.Free(dialogPtr);
+        dialogPtr = null;
     }
 
     private IProgressDialog Interface => dialogObj ?? throw new ObjectDisposedException(nameof(IProgressDialog));

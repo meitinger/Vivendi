@@ -41,19 +41,17 @@ internal static partial class Mstsc
             await File.WriteAllBytesAsync(rdpFileName, rdpFileContent, cancellationToken);
             unsafe
             {
-                void* ptr = null;
+                IMsRdpSessionManager manager = Win32.CreateInstance<IMsRdpSessionManager>(typeof(Mstsc).GUID, inProc: false, out void* ptr);
                 try
                 {
-                    IMsRdpSessionManager manager = Win32.CreateInstance<IMsRdpSessionManager>(typeof(Mstsc).GUID, inProc: false, out ptr);
+                    // last chance to cancel
+                    cancellationToken.ThrowIfCancellationRequested();
                     manager.StartRemoteApplication([userName, password], [rdpFileName], 0);
                     return Process.GetProcessById(manager.GetProcessId());
                 }
                 finally
                 {
-                    if (ptr is not null)
-                    {
-                        ComInterfaceMarshaller<IMsRdpSessionManager>.Free(ptr);
-                    }
+                    ComInterfaceMarshaller<IMsRdpSessionManager>.Free(ptr);
                 }
             }
         }
