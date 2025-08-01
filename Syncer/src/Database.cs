@@ -35,14 +35,15 @@ internal class Database(ILogger<Database> logger, Settings settings)
         using SqlDataReader reader = await command.ExecuteReaderAsync(CommandBehavior.SingleResult | CommandBehavior.SingleRow, cancellationToken);
         if (!await reader.ReadAsync(cancellationToken))
         {
-            logger.LogTrace("User '{UserName}' not found.", userName);
+            logger.LogTrace("Vivendi user for Windows user '{UserName}' not found.", userName);
             return null;
         }
-        logger.LogTrace("Found user '{UserName}'.", userName);
-        return new()
+        Credential credential = new()
         {
             UserName = await reader.GetFieldValueAsync<string>("UserName", cancellationToken),
             Password = await reader.GetFieldValueAsync<string>("Password", cancellationToken),
         };
+        logger.LogTrace("Found Vivendi user '{VivendiUserName}' for Windows user '{UserName}'.", credential.UserName, userName);
+        return credential;
     }
 }

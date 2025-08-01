@@ -70,16 +70,20 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         if (-1 < separator) { userName = userName[..separator]; }
         if (!await database.IsVivendiUserAsync(userName, stoppingToken)) { return null as Credential; }
         string password = new(Random.Shared.GetItems(settings.PasswordChars, settings.PasswordLength));
+        logger.LogTrace("Generated password.");
         using PrincipalContext context = new(ContextType.Machine);
+        logger.LogTrace("Opened machine context '{Context}'.", context.Name);
         using GroupPrincipal group = settings.FindSyncGroup(context);
+        logger.LogTrace("Found synced users group '{Group}'.", group.Name);
         using GroupPrincipal rdpUsers = GroupPrincipal.FindByIdentity(context, IdentityType.Sid, BuiltinRemoteDesktopUsersSid.Value);
+        logger.LogTrace("Found RDP users group '{Group}'.", rdpUsers.Name);
         UserPrincipal? user = null;
         try
         {
             user = UserPrincipal.FindByIdentity(context, IdentityType.SamAccountName, userName);
             if (user is null)
             {
-                logger.LogTrace("Creating user '{User}'...", userName);
+                logger.LogTrace("Creating Windows user '{User}'...", userName);
                 user = new(context, samAccountName: userName, password: password, enabled: true);
                 UpdateUserProperties(user, externalUser, checkIfNeeded: false);
                 user.Save();
@@ -95,11 +99,11 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
                     user.Delete();
                     throw;
                 }
-                logger.LogInformation("User '{User}' created.", userName);
+                logger.LogInformation("Windows user '{User}' created.", userName);
             }
             else if (user.IsMemberOf(group))
             {
-                logger.LogTrace("Updating existing user '{User}'...", userName);
+                logger.LogTrace("Updating existing Windows user '{User}'...", userName);
                 user.EnsureNotAdministrator();
                 sessions.DisconnectForUser(user, wait: false);
                 user.SetPassword(password);
@@ -107,11 +111,11 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
                 user.Save();
                 if (updated)
                 {
-                    logger.LogInformation("User '{User}' updated.", userName);
+                    logger.LogInformation("Windows user '{User}' updated.", userName);
                 }
                 else
                 {
-                    logger.LogTrace("User '{User}' already up-to-date.", userName);
+                    logger.LogTrace("Windows user '{User}' already up-to-date.", userName);
                 }
             }
             else
@@ -124,7 +128,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         }
         catch (PrincipalException ex)
         {
-            logger.LogWarning(ex, "Setup account for user '{User}' failed: {Message}", userName, ex.Message);
+            logger.LogWarning(ex, "Setup Windows account for user '{User}' failed: {Message}", userName, ex.Message);
             return ex;
         }
         finally

@@ -50,16 +50,22 @@ internal partial class Progress : IDisposable
         void Timer(uint timerAction, nint reserved = 0);
     }
 
-    private unsafe void* dialogPtr;
+    private enum CLSCTX { INPROC_SERVER = 0x1 }
+
+    [LibraryImport("ole32.dll")]
+    private static partial int CoCreateInstance(in Guid classId, nint unknownOuter, CLSCTX context, in Guid interfaceId, [MarshalUsing(typeof(UniqueComInterfaceMarshaller<IProgressDialog>))] out IProgressDialog ptr);
+
     private IProgressDialog? dialogObj;
 
-    public unsafe Progress() => dialogObj = Win32.CreateInstance<IProgressDialog>(typeof(Progress).GUID, inProc: true, out dialogPtr);
+    public Progress() => Marshal.ThrowExceptionForHR(CoCreateInstance(typeof(Progress).GUID, 0, CLSCTX.INPROC_SERVER, typeof(IProgressDialog).GUID, out dialogObj));
 
     unsafe void IDisposable.Dispose()
     {
-        dialogObj = null;
-        ComInterfaceMarshaller<IProgressDialog>.Free(dialogPtr);
-        dialogPtr = null;
+        if (dialogObj is not null)
+        {
+            ((ComObject)(object)dialogObj).FinalRelease();
+            dialogObj = null;
+        }
     }
 
     private IProgressDialog Interface => dialogObj ?? throw new ObjectDisposedException(nameof(IProgressDialog));
@@ -68,7 +74,7 @@ internal partial class Progress : IDisposable
 
     public string Title { set => Interface.SetTitle(value); }
 
-    public unsafe nint Window => dialogPtr is null ? throw new ObjectDisposedException(nameof(IProgressDialog)) : Win32.GetWindowFromIUnknown(dialogPtr);
+    public nint Window => Win32.GetWindowFromIUnknown(Interface);
 
     public void Hide() => Interface.StopProgressDialog();
 

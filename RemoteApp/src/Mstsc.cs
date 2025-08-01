@@ -33,26 +33,28 @@ internal static partial class Mstsc
         int GetProcessId();
     }
 
+    private enum CLSCTX { LOCAL_SERVER = 0x4 }
+
+    [LibraryImport("ole32.dll")]
+    private static partial int CoCreateInstance(in Guid classId, nint unknownOuter, CLSCTX context, in Guid interfaceId, [MarshalUsing(typeof(UniqueComInterfaceMarshaller<IMsRdpSessionManager>))] out IMsRdpSessionManager ptr);
+
     public static async Task<Process> StartRemoteAppAsync(string userName, string password, byte[] rdpFileContent, CancellationToken cancellationToken)
     {
         string rdpFileName = Path.GetTempFileName();
         try
         {
             await File.WriteAllBytesAsync(rdpFileName, rdpFileContent, cancellationToken);
-            unsafe
+            Marshal.ThrowExceptionForHR(CoCreateInstance(typeof(Mstsc).GUID, 0, CLSCTX.LOCAL_SERVER, typeof(IMsRdpSessionManager).GUID, out IMsRdpSessionManager manager));
+            try
             {
-                IMsRdpSessionManager manager = Win32.CreateInstance<IMsRdpSessionManager>(typeof(Mstsc).GUID, inProc: false, out void* ptr);
-                try
-                {
-                    // last chance to cancel
-                    cancellationToken.ThrowIfCancellationRequested();
-                    manager.StartRemoteApplication([userName, password], [rdpFileName], 0);
-                    return Process.GetProcessById(manager.GetProcessId());
-                }
-                finally
-                {
-                    ComInterfaceMarshaller<IMsRdpSessionManager>.Free(ptr);
-                }
+                // last chance to cancel
+                cancellationToken.ThrowIfCancellationRequested();
+                manager.StartRemoteApplication([userName, password], [rdpFileName], 0);
+                return Process.GetProcessById(manager.GetProcessId());
+            }
+            finally
+            {
+                ((ComObject)(object)manager).FinalRelease();
             }
         }
         finally

@@ -40,12 +40,12 @@ internal sealed class CleanupService(ILogger<CleanupService> logger, Settings se
                         if (!await database.IsVivendiUserAsync(userName, stoppingToken))
                         {
                             user.Delete();
-                            logger.LogInformation("User '{User}' deleted.", userName);
+                            logger.LogInformation("Windows user '{User}' deleted.", userName);
                         }
                     }
                     catch (Exception ex)
                     {
-                        logger.LogWarning(ex, "Maintenance for user '{User}' failed: {Message}", userName, ex.Message);
+                        logger.LogWarning(ex, "Maintenance for Windows user '{User}' failed: {Message}", userName, ex.Message);
                     }
                 }
                 logger.LogTrace("Finished cleanup."); ;

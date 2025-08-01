@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 
@@ -114,36 +115,17 @@ internal static partial class Win32
         SETFOREGROUND = 0x00010000,
     }
 
-    [LibraryImport("ole32.dll")]
-    private static unsafe partial int CoCreateInstance(in Guid classId, nint unknownOuter, CLSCTX context, in Guid interfaceId, out void* ptr);
-
     [LibraryImport("user32.dll")]
     public static partial nint GetDesktopWindow();
 
     [LibraryImport("shlwapi.dll")]
-    private static unsafe partial int IUnknown_GetWindow(void* unknown, out nint window);
+    private static partial int IUnknown_GetWindow([MarshalAs(UnmanagedType.Interface)] object unknown, out nint window);
 
     [LibraryImport("user32.dll", StringMarshalling = StringMarshalling.Utf16, SetLastError = true)]
     private static partial int MessageBoxW(nint window, string text, string? caption, MB type);
 
-    public static unsafe T CreateInstance<T>(in Guid classId, bool inProc, out void* ptr)
+    public static nint GetWindowFromIUnknown(object obj)
     {
-        Marshal.ThrowExceptionForHR(CoCreateInstance(classId, 0, inProc ? CLSCTX.INPROC_SERVER : CLSCTX.LOCAL_SERVER, typeof(T).GUID, out ptr));
-        try
-        {
-            return ComInterfaceMarshaller<T>.ConvertToManaged(ptr) ?? throw new NullReferenceException();
-        }
-        catch
-        {
-            ComInterfaceMarshaller<T>.Free(ptr);
-            ptr = null;
-            throw;
-        }
-    }
-
-    public static unsafe nint GetWindowFromIUnknown(void* obj)
-    {
-        ArgumentNullException.ThrowIfNull(obj);
         int hr = IUnknown_GetWindow(obj, out nint window);
         if (hr < 0)
         {
