@@ -68,7 +68,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         string userName = externalUser.UserName;
         int separator = userName.LastIndexOf('@');
         if (-1 < separator) { userName = userName[..separator]; }
-        if (!await database.IsVivendiUserAsync(userName, stoppingToken)) { return Result.Forbid(); }
+        if (!await database.IsVivendiUserAsync(userName, stoppingToken)) { return null as Credential; }
         string password = new(Random.Shared.GetItems(settings.PasswordChars, settings.PasswordLength));
         using PrincipalContext context = new(ContextType.Machine);
         using GroupPrincipal group = settings.FindSyncGroup(context);

@@ -26,12 +26,12 @@ internal partial class SerializerContext : JsonSerializerContext { }
 
 public class Credential
 {
-    public required string UserName { get; set; }
-    public required string Password { get; set; }
+    [JsonRequired] public required string UserName { get; set; }
+    [JsonRequired] public required string Password { get; set; }
 }
 
 internal class Result
 {
-    public required Credential? Credential { get; set; }
-    public required string? Error { get; set; }
+    public Credential? Credential { get; set; }
+    public string? Error { get; set; }
 }

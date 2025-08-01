@@ -27,23 +27,21 @@ internal partial class SerializerContext : JsonSerializerContext { }
 
 internal class Credential
 {
-    public required string UserName { get; set; }
-    public required string Password { get; set; }
+    [JsonRequired] public required string UserName { get; set; }
+    [JsonRequired] public required string Password { get; set; }
 }
 
 internal class ExternalUser
 {
-    public required string UserName { get; set; }
-    public required Dictionary<Guid, string> KnownFolders { get; set; }
+    [JsonRequired] public required string UserName { get; set; }
+    [JsonRequired] public required Dictionary<Guid, string> KnownFolders { get; set; }
 }
 
 internal class Result
 {
-    public static Result Forbid() => new() { Error = null, Credential = null };
+    public static implicit operator Result(Credential? credential) => new() { Credential = credential };
+    public static implicit operator Result(Exception exception) => new() { Error = exception.Message };
 
-    public static implicit operator Result(Credential? credential) => new() { Error = null, Credential = credential };
-    public static implicit operator Result(Exception exception) => new() { Error = exception.Message, Credential = null };
-
-    public required Credential? Credential { get; set; }
-    public required string? Error { get; set; }
+    public Credential? Credential { get; set; }
+    public string? Error { get; set; }
 }

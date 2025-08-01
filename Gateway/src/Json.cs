@@ -29,19 +29,19 @@ internal partial class SerializerContext : JsonSerializerContext { }
 
 internal class Credential
 {
-    public required string UserName { get; set; }
-    public required string Password { get; set; }
+    [JsonRequired] public required string UserName { get; set; }
+    [JsonRequired] public required string Password { get; set; }
 }
 
 internal class ExternalUser
 {
-    public required string UserName { get; set; }
-    public required Dictionary<Guid, string> KnownFolders { get; set; }
+    [JsonRequired] public required string UserName { get; set; }
+    [JsonRequired] public required Dictionary<Guid, string> KnownFolders { get; set; }
 }
 
 internal class Request
 {
-    public required Dictionary<Guid, string> KnownFolders { get; set; }
+    [JsonRequired] public required Dictionary<Guid, string> KnownFolders { get; set; }
 }
 
 internal class Response
@@ -53,13 +53,13 @@ internal class Response
         RdpFileContent = rdpFileContent,
     };
 
-    public required string UserName { get; set; }
-    public required string Password { get; set; }
-    public required byte[] RdpFileContent { get; set; }
+    [JsonRequired] public required string UserName { get; set; }
+    [JsonRequired] public required string Password { get; set; }
+    [JsonRequired] public required byte[] RdpFileContent { get; set; }
 }
 
 internal class Result
 {
-    public required Credential? Credential { get; set; }
-    public required string? Error { get; set; }
+    public Credential? Credential { get; set; }
+    public string? Error { get; set; }
 }

@@ -35,8 +35,8 @@ public sealed class OpenOlat : ControllerBase, IDisposable
 {
     private class ManagedUser
     {
-        [JsonPropertyName("key")] public required long IdentityKey { get; set; }
-        [JsonPropertyName("externalId")] public required string ExternalId { get; set; }
+        [JsonRequired, JsonPropertyName("key")] public required long IdentityKey { get; set; }
+        [JsonRequired, JsonPropertyName("externalId")] public required string ExternalId { get; set; }
         [JsonPropertyName("login")] public string? Login { get; set; }
         [JsonPropertyName("firstName")] public string? FirstName { get; set; }
         [JsonPropertyName("lastName")] public string? LastName { get; set; }

@@ -26,12 +26,12 @@ internal partial class SerializerContext : JsonSerializerContext { }
 
 internal class Request
 {
-    public required Dictionary<Guid, string> KnownFolders { get; set; }
+    [JsonRequired] public required Dictionary<Guid, string> KnownFolders { get; set; }
 }
 
 internal class Response
 {
-    public required string UserName { get; set; }
-    public required string Password { get; set; }
-    public required byte[] RdpFileContent { get; set; }
+    [JsonRequired] public required string UserName { get; set; }
+    [JsonRequired] public required string Password { get; set; }
+    [JsonRequired] public required byte[] RdpFileContent { get; set; }
 }
