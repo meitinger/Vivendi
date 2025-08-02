@@ -74,7 +74,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         using PrincipalContext context = new(ContextType.Machine);
         logger.LogTrace("Opened machine context on '{Server}'.", context.ConnectedServer);
         using GroupPrincipal group = settings.FindSyncGroup(context);
-        logger.LogTrace("Found synced users group '{Group}'.", group.Name);
+        logger.LogTrace("Found synced Windows users group '{Group}'.", group.Name);
         using GroupPrincipal rdpUsers = GroupPrincipal.FindByIdentity(context, IdentityType.Sid, BuiltinRemoteDesktopUsersSid.Value);
         logger.LogTrace("Found RDP users group '{Group}'.", rdpUsers.Name);
         UserPrincipal? user = null;

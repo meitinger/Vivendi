@@ -45,9 +45,7 @@ internal class Settings(IConfiguration configuration)
         _ => throw new NotImplementedException(),
     };
 
-    private readonly IConfigurationSection _section = configuration.GetRequiredSection("Syncer");
-
-    private T Get<T>(T? defaultValue = default, [CallerMemberName] string name = "") => _section.GetValue(name, defaultValue) ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
+    private T Get<T>(T? defaultValue = default, [CallerMemberName] string name = "") => configuration.GetRequiredSection("Syncer").GetValue(name, defaultValue) ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
 
     public TimeSpan CleanupInterval => Get(TimeSpan.FromHours(1));
     public string ConnectionString => Get<string>();

@@ -81,7 +81,7 @@ internal unsafe partial class KnownFolders(ILogger<KnownFolders> logger)
         new("374DE290-123F-4565-9164-39C4925E467B"), //Downloads
         new("4BD8D571-6D19-48D3-BE97-422220080E43"), //Music
         new("33E28130-4E1E-4676-835A-98395C3BC3BB"), //Pictures
-        new ("18989B1D-99B5-455B-841C-AB7C74E4DDFC"), //Videos
+        new("18989B1D-99B5-455B-841C-AB7C74E4DDFC"), //Videos
     ];
 
     [GeneratedRegex(@"^([a-zA-Z]):")]
