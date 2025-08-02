@@ -16,6 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+using Microsoft.Win32;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
@@ -40,6 +41,22 @@ internal static partial class Mstsc
 
     public static async Task<Process> StartRemoteAppAsync(string userName, string password, byte[] rdpFileContent, CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            const string regPath = @"HKEY_CURRENT_USER\Software\Microsoft\Terminal Server Client\PublisherBypassList";
+            int alreadyAllowedFlags = Registry.GetValue(regPath, Settings.Instance.RdpPublisherHash, 0) as int? ?? 0;
+            int combinedFlags = alreadyAllowedFlags | Settings.Instance.AllowedRdpFlags;
+            if (combinedFlags != alreadyAllowedFlags)
+            {
+                Registry.SetValue(regPath, Settings.Instance.RdpPublisherHash, combinedFlags, RegistryValueKind.DWord);
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine(ex.Message);
+        }
+        cancellationToken.ThrowIfCancellationRequested();
         string rdpFileName = Path.GetTempFileName();
         try
         {
