@@ -57,9 +57,9 @@ internal static partial class Win32
 
     public class NativeWindow
     {
-        public static unsafe NativeWindow FromHandle(nint handle)
+        public static NativeWindow FromHandle(nint handle)
         {
-            ArgumentNullException.ThrowIfNull(handle.ToPointer());
+            ArgumentOutOfRangeException.ThrowIfZero(handle);
             return new(handle);
         }
 
