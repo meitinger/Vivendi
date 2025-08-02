@@ -70,7 +70,7 @@ internal static partial class Extensions
         return app;
     }
 
-    public static async Task<T?> RunCancellableTaskAsync<T>(this IPublicClientApplication app, Func<bool> isCancelled, Func<IPublicClientApplication, CancellationToken, Task<T>> getter)
+    public static async Task<T?> RunCancellableTaskAsync<T>(this IPublicClientApplication app, Progress progress, Func<IPublicClientApplication, CancellationToken, Task<T>> getter)
     {
         using CancellationTokenSource cancellation = new();
         Task<T> task = getter(app, cancellation.Token);
@@ -83,7 +83,7 @@ internal static partial class Extensions
             }
             catch (OperationCanceledException ex) when (ex.CancellationToken == timeout.Token)
             {
-                if (isCancelled()) { cancellation.Cancel(); }
+                if (progress.IsCancelled) { cancellation.Cancel(); }
             }
             catch (OperationCanceledException ex) when (ex.CancellationToken == cancellation.Token)
             {

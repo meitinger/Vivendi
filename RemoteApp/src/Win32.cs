@@ -16,7 +16,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.Marshalling;
 
@@ -99,13 +98,6 @@ internal static partial class Win32
     }
 
     public const int ERROR_CANCELLED = 1223;
-
-    [Flags]
-    private enum CLSCTX
-    {
-        INPROC_SERVER = 0x1,
-        LOCAL_SERVER = 0x4,
-    }
 
     [Flags]
     private enum MB

@@ -24,6 +24,7 @@ namespace AufBauWerk.Vivendi.RemoteApp;
 [Guid("F8383852-FCD3-11d1-A6B9-006097DF5BD4")]
 internal partial class Progress : IDisposable
 {
+    [Flags]
     internal enum PROGDLG
     {
         NOTIME = 0x00000004,
@@ -55,22 +56,24 @@ internal partial class Progress : IDisposable
     [LibraryImport("ole32.dll")]
     private static partial int CoCreateInstance(in Guid classId, nint unknownOuter, CLSCTX context, in Guid interfaceId, [MarshalUsing(typeof(UniqueComInterfaceMarshaller<IProgressDialog>))] out IProgressDialog ptr);
 
-    private IProgressDialog? dialogObj;
+    private IProgressDialog? _interface;
 
-    public Progress() => Marshal.ThrowExceptionForHR(CoCreateInstance(typeof(Progress).GUID, 0, CLSCTX.INPROC_SERVER, typeof(IProgressDialog).GUID, out dialogObj));
+    public Progress() => Marshal.ThrowExceptionForHR(CoCreateInstance(typeof(Progress).GUID, 0, CLSCTX.INPROC_SERVER, typeof(IProgressDialog).GUID, out _interface));
 
     unsafe void IDisposable.Dispose()
     {
-        if (dialogObj is not null)
+        if (_interface is not null)
         {
-            ((ComObject)(object)dialogObj).FinalRelease();
-            dialogObj = null;
+            ((ComObject)(object)_interface).FinalRelease();
+            _interface = null;
         }
     }
 
-    private IProgressDialog Interface => dialogObj ?? throw new ObjectDisposedException(nameof(IProgressDialog));
+    private IProgressDialog Interface => _interface ?? throw new ObjectDisposedException(nameof(IProgressDialog));
 
     public bool IsCancelled => Interface.HasUserCancelled();
+
+    public string Line { set => Interface.SetLine(0, value, compactPath: false); }
 
     public string Title { set => Interface.SetTitle(value); }
 

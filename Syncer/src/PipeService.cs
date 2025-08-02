@@ -64,7 +64,7 @@ internal abstract class PipeService(string name, PipeDirection direction, ILogge
                     }
                     catch (IOException ex)
                     {
-                        logger.LogWarning(ex, "Send result failed: {Message}", ex.Message);
+                        logger.LogWarning(ex, "Send response failed: {Message}", ex.Message);
                     }
                 }
                 finally

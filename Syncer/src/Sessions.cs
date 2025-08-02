@@ -155,11 +155,11 @@ internal unsafe partial class Sessions(ILogger<Sessions> logger)
                 }
                 if (!WTSDisconnectSession(WTS_CURRENT_SERVER_HANDLE, sessionInfo.SessionId, wait))
                 {
-                    logger.LogWarning("Disconnect user '{User}' from terminal session #{SessionId} failed: {Message}", user.Name, sessionInfo.SessionId, Marshal.GetLastPInvokeErrorMessage());
+                    logger.LogWarning("Disconnect Windows user '{User}' from terminal session #{SessionId} failed: {Message}", user.Name, sessionInfo.SessionId, Marshal.GetLastPInvokeErrorMessage());
                 }
                 else
                 {
-                    logger.LogTrace("Disconnected user '{User}' from terminal sessions #{SessionId}.", user.Name, sessionInfo.SessionId);
+                    logger.LogTrace("Disconnected Windows user '{User}' from terminal sessions #{SessionId}.", user.Name, sessionInfo.SessionId);
                 }
             }
             logger.LogTrace("Enumerated {Count} terminal sessions.", count);

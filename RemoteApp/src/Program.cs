@@ -25,8 +25,11 @@ nint parent = 0;
 try
 {
     // show the progress dialog
-    using Progress progress = new();
-    progress.Title = Settings.Instance.Title;
+    using Progress progress = new()
+    {
+        Title = Settings.Instance.Title,
+        Line = Settings.Instance.EndpointUri.Host,
+    };
     progress.Show();
     parent = progress.Window;
     if (parent is 0) { parent = Win32.GetDesktopWindow(); }
@@ -42,7 +45,7 @@ try
         .EnableTokenCacheAsync();
 
     // authenticate with Entra ID and start the remote app
-    using Process? process = await app.RunCancellableTaskAsync(() => progress.IsCancelled, async (app, cancellationToken) =>
+    using Process? process = await app.RunCancellableTaskAsync(progress, async (app, cancellationToken) =>
     {
         Request request = new() { KnownFolders = await KnownFolders.GetCurrentAsync(cancellationToken) };
         Response response = await app.CallEndpointAsync(request, cancellationToken);

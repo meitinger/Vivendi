@@ -62,7 +62,7 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         }
         catch (IOException ex)
         {
-            logger.LogWarning(ex, "Receive external user from pipe failed: {Message}", ex.Message);
+            logger.LogWarning(ex, "Receive request from pipe failed: {Message}", ex.Message);
             return ex;
         }
         string userName = externalUser.UserName;
@@ -70,9 +70,9 @@ internal sealed class RemoteAppService(ILogger<RemoteAppService> logger, Setting
         if (-1 < separator) { userName = userName[..separator]; }
         if (!await database.IsVivendiUserAsync(userName, stoppingToken)) { return null as Credential; }
         string password = new(Random.Shared.GetItems(settings.PasswordChars, settings.PasswordLength));
-        logger.LogTrace("Generated password.");
+        logger.LogTrace("Generated password containing {Length} characters.", password.Length);
         using PrincipalContext context = new(ContextType.Machine);
-        logger.LogTrace("Opened machine context '{Context}'.", context.Name);
+        logger.LogTrace("Opened machine context on '{Server}'.", context.ConnectedServer);
         using GroupPrincipal group = settings.FindSyncGroup(context);
         logger.LogTrace("Found synced users group '{Group}'.", group.Name);
         using GroupPrincipal rdpUsers = GroupPrincipal.FindByIdentity(context, IdentityType.Sid, BuiltinRemoteDesktopUsersSid.Value);

@@ -42,12 +42,12 @@ internal class Settings(IConfiguration configuration)
     {
         SecurityIdentifier sid => find(context, IdentityType.Sid, sid.Value),
         NTAccount account => find(context, IdentityType.SamAccountName, account.Value),
-        _ => throw new InvalidOperationException(),
+        _ => throw new NotImplementedException(),
     };
 
-    private readonly IConfigurationSection section = configuration.GetRequiredSection("Syncer");
+    private readonly IConfigurationSection _section = configuration.GetRequiredSection("Syncer");
 
-    private T Get<T>(T? defaultValue = default, [CallerMemberName] string name = "") => section.GetValue(name, defaultValue) ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
+    private T Get<T>(T? defaultValue = default, [CallerMemberName] string name = "") => _section.GetValue(name, defaultValue) ?? throw new InvalidOperationException(new ArgumentNullException(name).Message);
 
     public TimeSpan CleanupInterval => Get(TimeSpan.FromHours(1));
     public string ConnectionString => Get<string>();

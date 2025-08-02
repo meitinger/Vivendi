@@ -30,9 +30,9 @@ internal sealed class LauncherService(ILogger<LauncherService> logger, Settings 
         string userName;
         try
         {
-            logger.LogTrace("Getting pipe user name...");
+            logger.LogTrace("Getting user name from pipe...");
             userName = stream.GetImpersonationUserName();
-            logger.LogTrace("Got pipe user name ({UserName}).", userName);
+            logger.LogTrace("Got user name '{UserName}' from pipe.", userName);
         }
         catch (IOException ex)
         {
