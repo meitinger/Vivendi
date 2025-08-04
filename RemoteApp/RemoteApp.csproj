@@ -8,7 +8,6 @@
     <Copyright>Copyright (c) 2024 by Manuel Meitinger</Copyright>
     <Description>Vivendi RemoteApp</Description>
     <ImplicitUsings>enable</ImplicitUsings>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <InvariantGlobalization>true</InvariantGlobalization>
     <Nullable>enable</Nullable>
     <OutputType>winexe</OutputType>
