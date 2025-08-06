@@ -2,8 +2,9 @@
 <Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
   xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
   xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
-  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities" IgnorableNamespaces="uap uap10 rescap">
-  <Identity Name="AufBauWerk.Vivendi.RemoteApp" Publisher="CN=AufBauWerk - Unternehmen für junge Menschen, O=AufBauWerk - Unternehmen für junge Menschen, OU=Systemadministration, L=Innsbruck, S=Tirol, C=AT" Version="2.0.1.0" ProcessorArchitecture="x64" />
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  xmlns:virtualization="http://schemas.microsoft.com/appx/manifest/virtualization/windows10" IgnorableNamespaces="uap uap10 rescap virtualization">
+  <Identity Name="AufBauWerk.Vivendi.RemoteApp" Publisher="CN=AufBauWerk - Unternehmen für junge Menschen, O=AufBauWerk - Unternehmen für junge Menschen, OU=Systemadministration, L=Innsbruck, S=Tirol, C=AT" Version="2.0.2.0" ProcessorArchitecture="x64" />
   <Properties>
     <DisplayName>Vivendi RemoteApp</DisplayName>
     <PublisherDisplayName>AufBauWerk - Unternehmen für junge Menschen</PublisherDisplayName>
@@ -11,6 +12,11 @@
     <uap10:PackageIntegrity>
       <uap10:Content Enforcement="on" />
     </uap10:PackageIntegrity>
+    <virtualization:RegistryWriteVirtualization>
+      <virtualization:ExcludedKeys>
+        <virtualization:ExcludedKey>HKEY_CURRENT_USER\Software\Microsoft\Terminal Server Client\PublisherBypassList</virtualization:ExcludedKey>
+      </virtualization:ExcludedKeys>
+    </virtualization:RegistryWriteVirtualization>
   </Properties>
   <Resources>
     <Resource Language="en-us" />
@@ -26,6 +32,7 @@
     </Application>
   </Applications>
   <Capabilities>
+    <rescap:Capability Name="unvirtualizedResources" />
     <rescap:Capability Name="runFullTrust" />
   </Capabilities>
 </Package>
