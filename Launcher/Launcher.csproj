@@ -16,7 +16,7 @@
     <ProjectDir>src\</ProjectDir>
     <RootNamespace>AufBauWerk.Vivendi.Launcher</RootNamespace>
     <TargetFramework>net9.0-windows</TargetFramework>
-    <Version>2.0.1.0</Version>
+    <Version>2.0.2.0</Version>
   </PropertyGroup>
 
 </Project>

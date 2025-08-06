@@ -53,6 +53,10 @@ internal static partial class Win32
     [LibraryImport("user32.dll", EntryPoint = "SendMessageW")]
     private static partial nint SendMessage(nint window, uint message, nint wParam, nint lParam);
 
+    [LibraryImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static partial bool SetForegroundWindow(nint window);
+
     #endregion
 
     public class NativeWindow
@@ -122,6 +126,8 @@ internal static partial class Win32
             yield return NativeWindow.FromHandle(handle);
         }
     }
+
+    public static void SetForeground(this Process process) => SetForegroundWindow(process.MainWindowHandle);
 
     public static void ShowError(string message) => MessageBox(0, message, "Vivendi Launcher", 0x00010010/*MB_OK|MB_ICONERROR|MB_SETFOREGROUND*/);
 }

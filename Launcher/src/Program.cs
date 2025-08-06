@@ -25,6 +25,12 @@ using System.Text.Json;
 
 try
 {
+    int sessionId = Process.GetCurrentProcess().SessionId;
+    if (Process.GetProcessesByName("Vivendi").Where(process => process.SessionId == sessionId).FirstOrDefault() is Process existingVivendi)
+    {
+        existingVivendi.SetForeground();
+        return;
+    }
     string? path = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Connext\Vivendi", "Path", null) as string;
     using Process vivendi = Process.Start(Path.Combine(path ?? AppContext.BaseDirectory, "Vivendi.exe"));
     using NamedPipeClientStream stream = new(".", "VivendiLauncher", PipeDirection.In, PipeOptions.Asynchronous, TokenImpersonationLevel.Identification, HandleInheritability.None);
