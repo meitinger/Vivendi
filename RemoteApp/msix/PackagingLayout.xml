@@ -1,0 +1,13 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<PackagingLayout xmlns="http://schemas.microsoft.com/appx/makeappx/2017">
+  <PackageFamily ID="AufBauWerk.Vivendi.RemoteApp" FlatBundle="true" ManifestPath="AppxManifest.xml" ResourceManager="false">
+    <Package ID="VivendiRemoteApp" ProcessorArchitecture="x64">
+      <Files>
+        <File DestinationPath="VivendiRemoteApp.exe" SourcePath="..\bin\Release\net9.0-windows\win-x64\publish\VivendiRemoteApp.exe" />
+        <File DestinationPath="msalruntime.dll" SourcePath="..\bin\Release\net9.0-windows\win-x64\publish\msalruntime.dll" />
+        <File DestinationPath="Assets\**" SourcePath="Assets\**" />
+        <File DestinationPath="Resources.pri" SourcePath="..\obj\Installer\Resources.pri" />
+      </Files>
+    </Package>
+  </PackageFamily>
+</PackagingLayout>
