@@ -4,3 +4,4 @@
 appsettings.json
 web.config
 *.private.cs
+private.h
