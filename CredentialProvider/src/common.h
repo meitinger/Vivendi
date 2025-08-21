@@ -2,14 +2,19 @@
 #include <Windows.h>
 #include <ShlGuid.h>
 #include <Shlwapi.h>
+#include <LM.h>
 #include <credentialprovider.h>
 #include <winhttp.h>
 #include <strsafe.h>
 
 #include "private.h"
+#include "resources.h"
+
+#define PROVIDER_NAME L"VivendiCredentialProvider"
 
 extern LONG g_lComObjectsCount;
 extern LONG g_lLockServerCount;
+extern HINSTANCE g_hinstDLL;
 extern const CLSID g_clsidProvider;
 
 extern HRESULT NewClassFactory(IClassFactory **ppcf);

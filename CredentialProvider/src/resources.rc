@@ -1,0 +1,30 @@
+#include "resources.h"
+
+IDB_TILE_IMAGE BITMAP "tile.bmp"
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION     2,0,1,0
+PRODUCTVERSION  2,0
+FILEFLAGSMASK   VS_FFI_FILEFLAGSMASK
+FILEFLAGS       0
+FILEOS          VOS_NT_WINDOWS32
+FILETYPE        VFT_DLL
+FILESUBTYPE     VFT2_UNKNOWN
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904E4"
+        BEGIN
+            VALUE "CompanyName",      "AufBauWerk - Unternehmen für junge Menschen"
+            VALUE "FileDescription",  "Vivendi CredentialProvider"
+            VALUE "LegalCopyright",   "Copyright (c) 2024 by Manuel Meitinger"
+            VALUE "OriginalFilename", "VivendiCredentialProvider.dll"
+            VALUE "ProductName",      "AufBauWerk Erweiterungen für Vivendi"
+        END
+    END
+
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1252
+    END
+END

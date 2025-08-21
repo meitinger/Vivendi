@@ -1,14 +1,17 @@
 #include "common.h"
 
-LONG g_lComObjectsCount;
-LONG g_lLockServerCount;
-const CLSID g_clsidProvider = PROVIDER_CLSID;
+LONG g_lComObjectsCount = 0;
+LONG g_lLockServerCount = 0;
+HINSTANCE g_hinstDLL = NULL;
+// {75F7EDBA-F320-45DA-B2B4-967EAD1D810D}
+const CLSID g_clsidProvider = {0x75f7edba, 0xf320, 0x45da, {0xb2, 0xb4, 0x96, 0x7e, 0xad, 0x1d, 0x81, 0xd}};
 
 BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, _In_opt_ LPVOID lpvReserved)
 {
     UNREFERENCED_PARAMETER(lpvReserved);
     if (fdwReason == DLL_PROCESS_ATTACH)
     {
+        g_hinstDLL = hinstDLL;
         DisableThreadLibraryCalls(hinstDLL);
     }
     return TRUE;
@@ -55,7 +58,7 @@ STDAPI DllRegisterServer(void)
         dwDllPathSize += 200;
         CLEANUP_CO_MEM(pszDllPath);
         CO_CALLOC(pszDllPath, sizeof(WCHAR) * dwDllPathSize);
-        CO_WIN32(dwDllPathLen = GetModuleFileNameW(NULL, pszDllPath, dwDllPathSize));
+        CO_WIN32(dwDllPathLen = GetModuleFileNameW(g_hinstDLL, pszDllPath, dwDllPathSize));
     } while (dwDllPathSize <= dwDllPathLen);
     CO_CALL(StringFromCLSID(&g_clsidProvider, &pszThisClsid));
     CO_REG(RegCreateKeyExW(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Classes\\CLSID", 0, NULL, 0, KEY_CREATE_SUB_KEY, NULL, &hkClsid, NULL));
