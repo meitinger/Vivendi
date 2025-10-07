@@ -38,6 +38,10 @@ internal static partial class Win32
     [LibraryImport("user32.dll", EntryPoint = "GetClassNameW", SetLastError = true, StringMarshalling = StringMarshalling.Utf16)]
     private static unsafe partial int GetClassName(nint window, char* className, int maxCount);
 
+    [LibraryImport("user32.dll", EntryPoint = "GetKeyboardState", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static unsafe partial bool GetKeyboardState(byte* keyState);
+
     [LibraryImport("user32.dll", EntryPoint = "GetWindowLongPtrW", SetLastError = true)]
     private static partial nint GetWindowLongPtr(nint window, int index);
 
@@ -125,6 +129,12 @@ internal static partial class Win32
         {
             yield return NativeWindow.FromHandle(handle);
         }
+    }
+
+    public static unsafe bool IsControlKeyPressed()
+    {
+        byte* keyState = stackalloc byte[256];
+        return GetKeyboardState(keyState) && (keyState[0x11/*VK_CONTROL*/] & 0x80) is not 0;
     }
 
     public static void SetForeground(this Process process) => SetForegroundWindow(process.MainWindowHandle);

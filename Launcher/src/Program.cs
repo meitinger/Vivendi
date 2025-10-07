@@ -26,9 +26,14 @@ using System.Text.Json;
 try
 {
     int sessionId = Process.GetCurrentProcess().SessionId;
-    if (Process.GetProcessesByName("Vivendi").Where(process => process.SessionId == sessionId).FirstOrDefault() is Process existingVivendi)
+    IEnumerable<Process> existingProcesses = Process.GetProcessesByName("Vivendi").Where(process => process.SessionId == sessionId);
+    if (Win32.IsControlKeyPressed())
     {
-        existingVivendi.SetForeground();
+        foreach (Process process in existingProcesses) process.Kill();
+    }
+    else if (existingProcesses.FirstOrDefault() is Process existingProcess)
+    {
+        existingProcess.SetForeground();
         return;
     }
     string? path = Registry.GetValue(@"HKEY_LOCAL_MACHINE\SOFTWARE\Connext\Vivendi", "Path", null) as string;
